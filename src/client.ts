@@ -235,26 +235,28 @@ import { runAdapter, type ActEnv } from './engine.ts'
     var TOOLBAR_COLLAPSED_KEY = 'ssid-toolbar-collapsed'
     var TOOLBAR_PINNED_KEY = 'ssid-toolbar-pinned'
     var TOOLBAR_CSS = [
-      '#ssid-toolbar{position:fixed;z-index:9999;font-family:system-ui,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;box-sizing:border-box}',
-      '#ssid-toolbar,#ssid-toolbar *{box-sizing:border-box}',
-      '#ssid-toolbar .ssid-tb-panel{position:relative;overflow:hidden;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);padding:6px;display:flex;flex-direction:column;gap:4px;transform-origin:50% 110%;transform:scale(.18) translateY(14px);opacity:0;visibility:hidden;transition:transform .22s cubic-bezier(.3,.8,.3,1),opacity .16s ease,visibility 0s linear .22s}',
-      '#ssid-toolbar.ssid-tb-expanded .ssid-tb-panel{transform:none;opacity:1;visibility:visible;transition:transform .3s cubic-bezier(.18,.9,.32,1.16),opacity .22s ease}',
+      // 壳 = 球↔面板一体（v1.8 morph）：收起 36px 圆、展开面板矩形，
+      // width/height/left/top/border-radius 四态过渡 = 「球长宽展开成面板」，
+      // 球图标钉在壳内球位，随壳移动到面板角淡出（2026-08-30 用户拍板）。
+      '#ssid-toolbar{position:fixed;z-index:9999;font-family:system-ui,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;box-sizing:border-box;width:36px;height:36px;border-radius:18px;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);box-shadow:0 4px 16px rgba(0,0,0,.3);overflow:hidden;transition:width .28s cubic-bezier(.25,.8,.25,1),height .28s cubic-bezier(.25,.8,.25,1),left .28s cubic-bezier(.25,.8,.25,1),top .28s cubic-bezier(.25,.8,.25,1),border-radius .28s cubic-bezier(.25,.8,.25,1)}',
+      '#ssid-toolbar *{box-sizing:border-box}',
+      '#ssid-toolbar.ssid-tb-expanded{border-radius:12px}',
+      '#ssid-toolbar .ssid-tb-ball{position:absolute;left:0;top:0;width:36px;height:36px;border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.85;transition:opacity .18s ease}',
+      '#ssid-toolbar .ssid-tb-ball svg{width:16px;height:16px}',
+      '#ssid-toolbar .ssid-tb-ball:hover{opacity:1}',
+      '#ssid-toolbar.ssid-tb-expanded .ssid-tb-ball{opacity:0;pointer-events:none}',
+      // 面板内容层：壳内自然尺寸（供壳 morph 测量）；背景视觉全在壳上
+      '#ssid-toolbar .ssid-tb-panel{position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:4px;padding:6px;color:var(--dsw-alias-label-primary,#d8e0ea)}',
       '#ssid-toolbar .ssid-tb-panel>*{opacity:0;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease}',
       '#ssid-toolbar.ssid-tb-expanded .ssid-tb-panel>*{opacity:1;transform:none}',
-      '#ssid-toolbar .ssid-tb-head{height:22px;cursor:grab}',
+      '#ssid-toolbar .ssid-tb-head{position:relative;height:22px;cursor:grab}',
       '#ssid-toolbar .ssid-tb-head:active{cursor:grabbing}',
-      '#ssid-toolbar .ssid-tb-title{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#98a2b3);letter-spacing:.05em;white-space:nowrap}',
-      '#ssid-toolbar .ssid-tb-pin{position:absolute;top:2px;right:2px;width:22px;height:22px;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.55;transition:opacity .15s,background .15s}',
+      '#ssid-toolbar .ssid-tb-pin{position:absolute;top:2px;right:2px;width:26px;height:26px;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.75;transition:opacity .15s,background .15s}',
       '#ssid-toolbar .ssid-tb-pin:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
-      '#ssid-toolbar .ssid-tb-pin svg{width:13px;height:13px}',
+      '#ssid-toolbar .ssid-tb-pin svg{width:15px;height:15px}',
       '#ssid-toolbar .ssid-tb-btn{border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left}',
       '#ssid-toolbar .ssid-tb-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
-      '#ssid-toolbar .ssid-tb-btn svg,#ssid-toolbar .ssid-tb-min svg{flex:none;width:15px;height:15px}',
-      '#ssid-toolbar .ssid-tb-btn svg{color:var(--dsw-alias-label-secondary,#98a2b3)}',
-      '#ssid-toolbar .ssid-tb-min{width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);color:var(--dsw-alias-label-primary,#d8e0ea);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.85;transition:transform .25s cubic-bezier(.3,.8,.3,1),opacity .2s ease}',
-      '#ssid-toolbar .ssid-tb-min:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
-      '#ssid-toolbar .ssid-tb-min svg{width:16px;height:16px}',
-      '#ssid-toolbar.ssid-tb-expanded .ssid-tb-min{transform:scale(.5);opacity:0;pointer-events:none}',
+      '#ssid-toolbar .ssid-tb-btn svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -343,25 +345,76 @@ import { runAdapter, type ActEnv } from './engine.ts'
         })(items[i].kind)
         panel.appendChild(b)
       }
-      var fab = document.createElement('button')
-      fab.type = 'button'
-      fab.className = 'ssid-tb-min'
-      fab.setAttribute('aria-label', '展开快捷工具栏')
-      fab.title = 'SSiD 快捷工具栏'
-      fab.innerHTML = toolbarIcon('menu')
-      trackLocale(fab, 'tb.expandAria', 'aria')
-      trackLocale(fab, 'tb.title', 'title')
+      var ball = document.createElement('button')
+      ball.type = 'button'
+      ball.className = 'ssid-tb-ball'
+      ball.setAttribute('aria-label', '展开快捷工具栏')
+      ball.title = 'SSiD 快捷工具栏'
+      ball.innerHTML = toolbarIcon('menu')
+      trackLocale(ball, 'tb.expandAria', 'aria')
+      trackLocale(ball, 'tb.title', 'title')
       root.appendChild(panel)
-      root.appendChild(fab)
+      root.appendChild(ball)
       document.body.appendChild(root)
 
-      // 收起/展开（状态持久化）：root 类驱动画轴动画——panel 从悬浮球方向
-      // scale+淡入展开、fab 缩小淡出；收起反向（不再用 display:none 切换，
-      // 避免切换瞬间的 mouseleave 触发收起抖动，2026-08-30）。
+      // ---- 球↔面板 morph（v1.8）：壳 = root，唯一锚点 = 球位（收起态左上角）----
+      // 收起：36x36 圆；展开：壳尺寸/位置/圆角四态过渡成面板矩形（内容自然
+      // 尺寸测量）；ball 图标钉在壳内球位，随壳移动到面板角淡出。
+      var BALL_SIZE = 36
+      var BALL_R = 18
+      var expanded = false
+      var ballX = 0, ballY = 0 // 球壳左上角（收起态位置）
+      var lastDir = { hor: 'left', vert: 'up' } // 展开方向（drag 保存时反推球位用）
+      try {
+        var savedPos = JSON.parse(String(localStorage.getItem(TOOLBAR_POS_KEY) || 'null'))
+        if (savedPos !== null && typeof savedPos.x === 'number' && typeof savedPos.y === 'number') {
+          ballX = savedPos.x
+          ballY = savedPos.y
+        }
+      } catch (_e) {}
+      if (ballX === 0 && ballY === 0) {
+        ballX = window.innerWidth - BALL_SIZE - 16
+        ballY = window.innerHeight - BALL_SIZE - 16
+      }
+      ballX = Math.max(4, Math.min(ballX, window.innerWidth - BALL_SIZE - 4))
+      ballY = Math.max(4, Math.min(ballY, window.innerHeight - BALL_SIZE - 4))
+      root.style.left = ballX + 'px'
+      root.style.top = ballY + 'px'
+
+      // 面板展开位置：优先朝屏幕中心方向长（球在右→面板向左；下方空间足→向下）
+      var panelPlacement = function (W: number, H: number) {
+        var vw = window.innerWidth, vh = window.innerHeight
+        var cx = ballX + BALL_R, cy = ballY + BALL_R
+        var hor = cx + BALL_R + W <= vw - 8 ? 'right' : 'left'
+        var vert = cy + BALL_R + H <= vh - 8 ? 'down' : 'up'
+        var left = hor === 'right' ? cx + BALL_R : cx - BALL_R - W
+        var top = vert === 'down' ? cy + BALL_R : cy - BALL_R - H
+        left = Math.max(4, Math.min(left, vw - W - 4))
+        top = Math.max(4, Math.min(top, vh - H - 4))
+        lastDir = { hor: hor, vert: vert }
+        return { left: left, top: top }
+      }
+
+      // 收起/展开（状态持久化）：壳尺寸/位置/圆角过渡 + 子项 stagger 淡入
       var setCollapsed = function (collapsed: boolean) {
-        root.classList.toggle('ssid-tb-expanded', !collapsed)
-        // 展开时面板子项按序延迟淡入（画轴展开的层次感）；收起延迟归零，
-        // 让面板整体随 transform 一起缩回。
+        expanded = !collapsed
+        if (collapsed) {
+          root.classList.remove('ssid-tb-expanded')
+          root.style.width = BALL_SIZE + 'px'
+          root.style.height = BALL_SIZE + 'px'
+          root.style.left = ballX + 'px'
+          root.style.top = ballY + 'px'
+        } else {
+          var W = panel.offsetWidth + 2 // +2 = 壳左右 border
+          var H = panel.offsetHeight + 2
+          var p = panelPlacement(W, H)
+          root.style.width = W + 'px'
+          root.style.height = H + 'px'
+          root.style.left = p.left + 'px'
+          root.style.top = p.top + 'px'
+          root.classList.add('ssid-tb-expanded')
+        }
+        // 展开：面板子项按序延迟淡入（层次感）；收起延迟归零随壳整体缩回
         var kids = panel.children
         for (var ki = 0; ki < kids.length; ki++) {
           ;(kids[ki] as HTMLElement).style.transitionDelay = collapsed ? '0ms' : 40 + ki * 24 + 'ms'
@@ -379,19 +432,13 @@ import { runAdapter, type ActEnv } from './engine.ts'
       }
       var applyPos = function (x: number, y: number) {
         var vw = window.innerWidth, vh = window.innerHeight
-        var w = root.offsetWidth || 170
-        var h = root.offsetHeight || 220
-        if (x === null || y === null) { root.style.left = ''; root.style.right = '16px'; root.style.top = ''; root.style.bottom = '16px'; return }
+        var w = root.offsetWidth || BALL_SIZE
+        var h = root.offsetHeight || BALL_SIZE
         x = Math.max(4, Math.min(x, vw - w - 4))
         y = Math.max(4, Math.min(y, vh - h - 4))
-        root.style.left = x + 'px'; root.style.top = y + 'px'; root.style.right = ''; root.style.bottom = ''
+        root.style.left = x + 'px'
+        root.style.top = y + 'px'
       }
-      var pos = null
-      try { pos = JSON.parse(localStorage.getItem(TOOLBAR_POS_KEY) || 'null') } catch (_e) {}
-      // 自由定位恢复（v1.4 吸附回退；旧 {side,y} 数据忽略 = 默认右下）
-      applyPos(pos ? pos.x : null, pos ? pos.y : null)
-      var collapsed = false
-      try { collapsed = localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === '1' } catch (_e) {}
       // 初始：钉住 = 展开；未钉住 = 收起（hover 触发展开）
       setCollapsed(pinned ? false : true)
       applyPin()
@@ -403,22 +450,37 @@ import { runAdapter, type ActEnv } from './engine.ts'
         applyPin()
         setCollapsed(pinned ? false : true)
       })
-      // hover 展开/收起（未钉住）——root 容器判定 + 150ms 防抖：
-      // 展开瞬间 fab display:none 会触发 fab 的 mouseleave（闪烁根因），
-      // 因此收起只看「离开整个 root」（panel+fab 都在 root 内，鼠标在两者
-      // 间移动不触发）；延迟收起给鼠标移回留缓冲。
+      // hover 展开/收起（未钉住）——「鼠标点 + 壳膨胀区」判定：morph 过渡中
+      // 壳边界时刻移动，仅靠 mouseleave 会误判（鼠标可能瞬时在壳外/球位旁）；
+      // 统一在 mousemove 里按「鼠标是否在壳膨胀区内」调度收起——鼠标不动就
+      // 不触发评估（展开后停在球位/面板角不误收），移动才判定（2026-08-30）。
       var hideTimer: ReturnType<typeof setTimeout> | null = null
+      var lastMouse = { x: -1, y: -1 }
+      var inShellArea = function () {
+        var r = root.getBoundingClientRect()
+        var m = 20 // 膨胀半径：覆盖球↔面板间隙与过渡帧
+        return lastMouse.x >= r.left - m && lastMouse.x <= r.right + m &&
+          lastMouse.y >= r.top - m && lastMouse.y <= r.bottom + m
+      }
       var scheduleCollapse = function () {
-        if (pinned) return
+        if (pinned || !expanded) return
         if (hideTimer !== null) clearTimeout(hideTimer)
-        hideTimer = setTimeout(function () { setCollapsed(true) }, 150)
+        hideTimer = setTimeout(function () { setCollapsed(true) }, 220)
       }
       var cancelCollapse = function () {
         if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null }
       }
-      fab.addEventListener('mouseenter', function () { cancelCollapse(); if (!pinned) setCollapsed(false) })
-      root.addEventListener('mouseenter', cancelCollapse)
-      root.addEventListener('mouseleave', scheduleCollapse)
+      document.addEventListener('mousemove', function (ev) {
+        lastMouse = { x: ev.clientX, y: ev.clientY }
+        if (pinned) return
+        if (!expanded) return
+        if (inShellArea()) cancelCollapse()
+        else scheduleCollapse()
+      })
+      root.addEventListener('mouseenter', function () {
+        cancelCollapse()
+        if (!pinned && !expanded) setCollapsed(false)
+      })
 
       // 拖拽移动（柄 = head；mousedown 后跟随指针，结束存位置）
       var dragging: { dx: number; dy: number } | null = null
@@ -434,11 +496,16 @@ import { runAdapter, type ActEnv } from './engine.ts'
           dragging = null
           document.removeEventListener('mousemove', onMove)
           document.removeEventListener('mouseup', onUp)
-          // 自由定位保存（v1.4 吸附已回退——吸附边缘与侧边栏重叠，2026-08-30
-          // 用户拍板恢复 v0.4 模型：位置 {x,y} 持久化）
+          // 保存球位（收起态位置）：按展开方向从当前面板位反推
+          // （右/下展开 → 球在面板外侧 -36；左/上展开 → 球位 = 面板对侧）。
+          var r = root.getBoundingClientRect()
+          var bx = lastDir.hor === 'right' ? r.left - BALL_SIZE : r.left + r.width
+          var by = lastDir.vert === 'down' ? r.top - BALL_SIZE : r.top + r.height
+          var vw = window.innerWidth, vh = window.innerHeight
+          ballX = Math.max(4, Math.min(Math.round(bx), vw - BALL_SIZE - 4))
+          ballY = Math.max(4, Math.min(Math.round(by), vh - BALL_SIZE - 4))
           try {
-            var r = root.getBoundingClientRect()
-            localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }))
+            localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ x: ballX, y: ballY }))
           } catch (_e) {}
         }
         document.addEventListener('mousemove', onMove)
