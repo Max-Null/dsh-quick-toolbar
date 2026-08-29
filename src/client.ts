@@ -243,7 +243,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
       '#ssid-toolbar.ssid-tb-expanded{border-radius:12px}',
       // 球图标层：独立于壳（fixed 于球位、pointer-events 穿透）——morph 时
       // 图标停在原位淡出，壳从球位向面板位长开；面板位置公式保证球位 ⊂ 面板一角。
-      '#ssid-toolbar-ball{position:fixed;z-index:10000;width:36px;height:36px;pointer-events:none;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-primary,#d8e0ea);opacity:.9;transition:opacity .18s ease}',
+      '#ssid-toolbar-ball{position:fixed;z-index:10000;width:36px;height:36px;margin:0;padding:0;border:0;background:transparent;box-shadow:none;appearance:none;-webkit-appearance:none;pointer-events:none;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-primary,#d8e0ea);opacity:.9;transition:opacity .18s ease}',
       '#ssid-toolbar-ball svg{width:16px;height:16px}',
       // 面板内容层：壳内自然尺寸（供壳 morph 测量）；背景视觉全在壳上
       '#ssid-toolbar .ssid-tb-panel{position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:4px;padding:6px;color:var(--dsw-alias-label-primary,#d8e0ea)}',
