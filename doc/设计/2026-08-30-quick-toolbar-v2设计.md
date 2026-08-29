@@ -22,22 +22,30 @@
 
 目标：适配「打开设置/配置页」类按钮。v1 只定义了 schema（`{ kind: 'open-settings', path?: string }`），执行器报未实现。
 
-方案：**多通道探测链（provider 链）**，引擎按序尝试、命中即用（纯数据表达，无任意代码）：
+**调研点① 结论（2026-08-30 已查证 DSH master 源码）**：设置面板的打开状态由**应用 shell 的 React 组件私有持有**（`packages/client/ui-settings/src/client/contract/slots.ts`：…"The shell owns modal visibility and navigation"），**无公开 window 级钩子**（grep 全量无 `__settingsOpen` 类全局）；`ctx.remote.settings` 仅两个 RPC：`openSettingsDocument`（宿主打开 provider 文档）与 `openAgentPresetDirectory`，均非「打开面板」。公开语义入口 = `sidebar.settings` 槽的**触发按钮**（ui-settings-general 的 SettingsTrigger，按钮文案走 locale（设置/Settings），面板 = dialog，开=DOM 存在、关=移除）。
 
-1. `window` 钩子探测表（配置化）：`__dshSettingsOpen` / `__settingsOpen` 等（**调研点①**：DSH 官方 settings 打开钩子的准确清单——从 dsh 源码 `settings` 插件/`ui-slots` 处查证；探测表放 `src/channels.ts` 常量，L1 可测）
-2. DOM 语义锚点：`[aria-label*="settings" i], [data-slot*="settings"]` 等（DSH token/aria 风格）→ 点击
+方案：**语义锚点点击链**（纯数据，无任意代码）：
+
+1. aria/文案语义锚点：`[aria-label="设置"], [aria-label="Settings"]` + `:text-matches("设置|Settings")` 定位触发按钮（双 locale 探测，复用现有 lang 跟踪）→ click
+2. 「再点关闭」探测（可选）：`[role="dialog"][aria-labelledby*="settings" i]` 存在 = 开着 → 点击触发按钮即关（**调研注**：dialog 关闭后 DOM 移除与否待 L2 验证；若关闭仅改样式，则改为样式判定)
 3. 失败 → `console.warn` + false（防御语义与 v1 一致，不假装成功）
 
-参数 `path?`：仅作 provider 1 的可选子页定位（钩子收 path 则传；否则忽略并 warn）。
+参数 `path?`：v1 schema 保留，语义=面板内目标 section 的锚（`openSection(id)` 属 shell 私有，跨包不可达）——**本阶段忽略 path 并 warn**（不承诺未达成的深链）。
 
 ### A2. command
 
 目标：适配「触发 dsh-commands 文本命令」类按钮。v1 定义 `{ kind: 'command', name: string }`。
 
-方案：**命令注入通道（3 级）**：
+**调研点② 结论（2026-08-30 已查证 DSH master 源码）**：`dsh-commands` 是**官方包** `@deepseek-ai/dsh-commands`（`packages/interaction/commands`），命令经 `packages/client/ui-commands`（`CommandUiRuntime`）暴露 client 面：
 
-1. 插件全局 API：dsh-commands 若暴露 `window.__commandsRun(name)` 之类（**调研点②**：dsh-commands 现网 API；无 API 则本项目为 dsh-commands 提 patch/PR——三方插件配合路径）
-2. 输入模拟：定位命令输入框（选择器匹配表，配置化）→ 聚焦 + 值注入 + Enter（`InputEvent` 走原生事件，尊重框架；无 headless 风险——纯 DOM）
+- **host 执行（推荐）**：`ctx.remote.commands.execute(sessionId, line, images?)`（line = `/name args`；命令目录 `ctx.remote.commands.list(sessionId)`）。execute 直接 admit host 命令、durable 记录 `command/run`/`command/done` 生命周期（渲染为持久 flow node，无需额外 UI）；**命令按会话寻址**（sessionId 必填）
+- client 命令贡献：`ctx.commandUi.register(contribution)`（popupSelect 型）/ `decorate(decoration)` —— 属商务包集成面，quick-toolbar 不消费（只 execute）
+- **依赖面**：`remote.commands` 是注入服务（ui-commands 的 `inject = ['inputTriggers','sessions','remote','remote.commands']`）；quick-toolbar 的 client 非静态装配（ModuleLoader 协议），须从 apply ctx 探测 `remote` 面——**实现期验证 ctx 探测路径**（sessionId 取当前激活会话：`sessions.scopeOf`/activeSession）
+
+方案：**三级通道**：
+
+1. `ctx.remote.commands.execute(sessionId, '/name')`（master；fire-and-forget，durable 记录）
+2. 输入模拟（rc.2/无 remote.commands 兜底）：定位 composer 输入（DSH 语义锚点拟 selected）→ 写入 `/name` + Enter（原生事件链；适配器只用内置行为，不加宽不可信输入）
 3. 失败 → 警告 + false
 
 **边界（重要）**：输入模拟仅在「引擎内置行为」里使用（引擎代码=可信），LLM 用户的适配器仍只写数据；此边界写入 `adapters.prompt.md` 明示——**行为=引擎能力，适配器=数据，不因 command 行为开放而放宽 v1 的不可信输入原则**。
@@ -109,13 +117,13 @@
 4. **样式纪律**：新 UI 用 DSH token + `data-slot`/aria 锚点（§7 规矩）；扩展包 UI 复用现有 badge/settings 组件
 5. **文档同步**：每方向落地后同步 `README.md` + `adapters.prompt.md`（新增行为即新增提示词能力说明）
 
-## G. 调研点汇总（落地前查证，不凭记忆）
+## G. 调研点状态（2026-08-30 已查证）
 
-1. DSH 官方 settings 打开钩子（`window.__*Settings*`？）
-2. dsh-commands 的命令触发 API（全局钩子/无 API 需 patch）
-3. DSH 官方挂载点清单（settings 区/会话头/工具栏……）与 ui-slots slot 名
-4. 插件中心第三方适配器包安装/更新协议（vendor/registry）
-5. ui-slots 公开 slot 挂载 API
+1. ✅ **settings 打开钩子**：无公开 window 钩子；面板 open 状态 shell 私有（ui-settings slotted dialog）；`remote.settings` 仅文档/预设目录两个 RPC → A1 改「语义锚点点击链」
+2. ✅ **dsh-commands 触发 API**：官方包,`ctx.remote.commands.execute(sessionId, line)`（按会话寻址 + durable 生命周期）+ composer 输入模拟兜底 → A2 三级通道
+3. ⬜ DSH 官方挂载点清单与 ui-slots slot 名（支撑 B/D）
+4. ⬜ 插件中心第三方数据包安装/更新协议（支撑 C）
+5. ⬜ ui-slots 公开挂载 API（支撑 D；B 可复用其结果）
 
 ## H. 里程碑
 
