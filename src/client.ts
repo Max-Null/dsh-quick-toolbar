@@ -364,8 +364,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
       var BALL_SIZE = 36
       var BALL_R = 18
       var expanded = false
-      var ballX = 0, ballY = 0 // 球壳左上角（收起态位置）
-      var lastDir = { hor: 'left', vert: 'up' } // 展开方向（drag 保存时反推球位用）
+      var ballX = 0, ballY = 0 // 球壳左上角（收起态位置——唯一锚点）
       try {
         var savedPos = JSON.parse(String(localStorage.getItem(TOOLBAR_POS_KEY) || 'null'))
         if (savedPos !== null && typeof savedPos.x === 'number' && typeof savedPos.y === 'number') {
@@ -395,7 +394,6 @@ import { runAdapter, type ActEnv } from './engine.ts'
         var top = vert === 'down' ? ballY : ballY + BALL_SIZE - H
         left = Math.max(4, Math.min(left, vw - W - 4))
         top = Math.max(4, Math.min(top, vh - H - 4))
-        lastDir = { hor: hor, vert: vert }
         return { left: left, top: top }
       }
 
@@ -510,14 +508,14 @@ import { runAdapter, type ActEnv } from './engine.ts'
           dragging = null
           document.removeEventListener('mousemove', onMove)
           document.removeEventListener('mouseup', onUp)
-          // 保存球位（收起态位置）：按展开方向从当前面板位反推
-          // （右/下展开 → 球在面板外侧 -36；左/上展开 → 球位 = 面板对侧）。
+          // 保存球位：球+面板是「刚体」——拖拽结束球位 = 起始球位 + 面板位移
+          // （与 onMove 中球图标层的跟随一致）。下次展开再由 panelPlacement
+          // 按「球在屏幕哪个象限」重新计算面板方向（2026-08-30 用户反馈：
+          // 旧实现按拖拽前的 lastDir 反推，面板移到新象限后球位不稳定）。
           var r = root.getBoundingClientRect()
-          var bx = lastDir.hor === 'right' ? r.left - BALL_SIZE : r.left + r.width
-          var by = lastDir.vert === 'down' ? r.top - BALL_SIZE : r.top + r.height
           var vw = window.innerWidth, vh = window.innerHeight
-          ballX = Math.max(4, Math.min(Math.round(bx), vw - BALL_SIZE - 4))
-          ballY = Math.max(4, Math.min(Math.round(by), vh - BALL_SIZE - 4))
+          ballX = Math.max(4, Math.min(Math.round(ballStartX + (r.left - shellLeft)), vw - BALL_SIZE - 4))
+          ballY = Math.max(4, Math.min(Math.round(ballStartY + (r.top - shellTop)), vh - BALL_SIZE - 4))
           ball.style.left = ballX + 'px'
           ball.style.top = ballY + 'px'
           try {
