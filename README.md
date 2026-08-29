@@ -8,7 +8,9 @@ SSiD 壳 → 标题栏按钮组；DSH web → **iOS 小白点式悬浮球**（�
 
 | SSiD 标题栏（壳） | web 悬浮球 | 聚合面板 |
 |---|---|---|
-| 待补（L2 环境实测截图） | 待补（L2 环境实测截图） | 待补（L2 环境实测截图） |
+| ![SSiD 标题栏](docs/shots/ssid-titlebar.png) | ![web 悬浮球](docs/shots/web-float.png) | ![聚合面板](docs/shots/web-panel.png) |
+
+> 截图环境：SSiD 0.1.15 壳（标题栏）与 DSH master web（悬浮球/面板）；聚合面板为 web 右下角悬浮球 morph 展开态。
 
 ## 安装
 
