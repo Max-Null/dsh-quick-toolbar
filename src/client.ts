@@ -397,6 +397,32 @@ import { runAdapter, type ActEnv } from './engine.ts'
         return { left: left, top: top }
       }
 
+      // 逆放置：已知面板矩形 r，反解球位（收起态左上角）——球 = 面板的
+      // 「屏幕外侧角」：面板在左上象限 → 球也在面板左上角侧；右下 → 球贴
+      // 面板右下角侧。约束 = 自洽闭环：从该球位展开面板必须落回 r 原位
+      // （方向判定与假设一致），四方向组合按优先级取第一个自洽解。
+      var invertPlacement = function (r: { left: number; top: number; width: number; height: number }) {
+        var vw = window.innerWidth, vh = window.innerHeight
+        var W = r.width, H = r.height
+        var combos = [
+          { hor: 'right', vert: 'down' },
+          { hor: 'left', vert: 'up' },
+          { hor: 'right', vert: 'up' },
+          { hor: 'left', vert: 'down' },
+        ]
+        for (var ci = 0; ci < combos.length; ci++) {
+          var hor = combos[ci].hor
+          var vert = combos[ci].vert
+          var bx = hor === 'right' ? r.left : r.left + W - BALL_SIZE
+          var by = vert === 'down' ? r.top : r.top + H - BALL_SIZE
+          var cx2 = bx + BALL_R, cy2 = by + BALL_R
+          var h2 = cx2 + BALL_R + W <= vw - 8 ? 'right' : 'left'
+          var v2 = cy2 + BALL_R + H <= vh - 8 ? 'down' : 'up'
+          if (h2 === hor && v2 === vert) return { bx: bx, by: by }
+        }
+        return { bx: r.left, by: r.top } // 兜底：球 = 面板左上角
+      }
+
       // 收起/展开（状态持久化）：壳尺寸/位置/圆角过渡 + 子项 stagger 淡入；
       // 球图标固定于球位（展开淡出、收起淡回）。
       var setCollapsed = function (collapsed: boolean) {
@@ -492,30 +518,24 @@ import { runAdapter, type ActEnv } from './engine.ts'
       head.addEventListener('mousedown', function (ev) {
         if (ev.target === pinBtn) return
         var shellRect = root.getBoundingClientRect()
-        var shellLeft = shellRect.left, shellTop = shellRect.top
-        var ballStartX = ballX, ballStartY = ballY
         dragging = { dx: ev.clientX - shellRect.left, dy: ev.clientY - shellRect.top }
         ev.preventDefault()
         var onMove = function (mev: MouseEvent) {
           if (!dragging) return
           applyPos(mev.clientX - dragging.dx, mev.clientY - dragging.dy)
-          // 球图标层随组件平移（保持刚性关系；展开态图标不可见，仅同步布局）
-          var r = root.getBoundingClientRect()
-          ball.style.left = (ballStartX + r.left - shellLeft) + 'px'
-          ball.style.top = (ballStartY + r.top - shellTop) + 'px'
         }
         var onUp = function () {
           dragging = null
           document.removeEventListener('mousemove', onMove)
           document.removeEventListener('mouseup', onUp)
-          // 保存球位：球+面板是「刚体」——拖拽结束球位 = 起始球位 + 面板位移
-          // （与 onMove 中球图标层的跟随一致）。下次展开再由 panelPlacement
-          // 按「球在屏幕哪个象限」重新计算面板方向（2026-08-30 用户反馈：
-          // 旧实现按拖拽前的 lastDir 反推，面板移到新象限后球位不稳定）。
+          // 保存球位：逆放置——球 = 面板的屏幕外侧角（面板左上象限 → 球在
+          // 面板左上角侧；右下象限 → 球贴面板右下角侧），并保证「从球位展开
+          // 面板落回当前面板位」的自洽闭环（2026-08-30 用户拍板语义）。
           var r = root.getBoundingClientRect()
+          var sp = invertPlacement({ left: r.left, top: r.top, width: r.width, height: r.height })
           var vw = window.innerWidth, vh = window.innerHeight
-          ballX = Math.max(4, Math.min(Math.round(ballStartX + (r.left - shellLeft)), vw - BALL_SIZE - 4))
-          ballY = Math.max(4, Math.min(Math.round(ballStartY + (r.top - shellTop)), vh - BALL_SIZE - 4))
+          ballX = Math.max(4, Math.min(Math.round(sp.bx), vw - BALL_SIZE - 4))
+          ballY = Math.max(4, Math.min(Math.round(sp.by), vh - BALL_SIZE - 4))
           ball.style.left = ballX + 'px'
           ball.style.top = ballY + 'px'
           try {
