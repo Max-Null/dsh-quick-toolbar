@@ -365,17 +365,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
       }
       var pos = null
       try { pos = JSON.parse(localStorage.getItem(TOOLBAR_POS_KEY) || 'null') } catch (_e) {}
-      // v1.4：位置格式迁移为 { side: 'left'|'right', y }（吸附边缘后持久化）；
-      // 旧的 { x, y } 格式仍兼容（自由定位恢复）。
-      if (pos && typeof pos === 'object' && 'side' in pos) {
-        var vh0 = window.innerHeight
-        var y0 = Math.max(4, Math.min(typeof pos.y === 'number' ? pos.y : 16, vh0 - (root.offsetHeight || 220) - 4))
-        if (pos.side === 'left') { root.style.left = '16px'; root.style.right = '' }
-        else { root.style.left = ''; root.style.right = '16px' }
-        root.style.top = y0 + 'px'; root.style.bottom = ''
-      } else {
-        applyPos(pos ? pos.x : null, pos ? pos.y : null)
-      }
+      // 自由定位恢复（v1.4 吸附回退；旧 {side,y} 数据忽略 = 默认右下）
+      applyPos(pos ? pos.x : null, pos ? pos.y : null)
       var collapsed = false
       try { collapsed = localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === '1' } catch (_e) {}
       setCollapsed(collapsed)
@@ -398,16 +389,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
           dragging = null
           document.removeEventListener('mousemove', onMove)
           document.removeEventListener('mouseup', onUp)
-          // v1.4：iOS 小白点式吸附——松手贴最近边缘（16px），y 保持
-          var vw = window.innerWidth
-          var vh = window.innerHeight
-          var r = root.getBoundingClientRect()
-          var side = r.left + r.width / 2 < vw / 2 ? 'left' : 'right'
-          var y = Math.max(4, Math.min(r.top, vh - r.height - 4))
-          if (side === 'left') { root.style.left = '16px'; root.style.right = '' }
-          else { root.style.left = ''; root.style.right = '16px' }
-          root.style.top = y + 'px'; root.style.bottom = ''
-          try { localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ side: side, y: Math.round(y) })) } catch (_e) {}
+          // 自由定位保存（v1.4 吸附已回退——吸附边缘与侧边栏重叠，2026-08-30
+          // 用户拍板恢复 v0.4 模型：位置 {x,y} 持久化）
+          try {
+            var r = root.getBoundingClientRect()
+            localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }))
+          } catch (_e) {}
         }
         document.addEventListener('mousemove', onMove)
         document.addEventListener('mouseup', onUp)
