@@ -389,10 +389,22 @@ import { runAdapter, type ActEnv } from './engine.ts'
         applyPin()
         setCollapsed(pinned ? false : true)
       })
-      // hover 展开/收起（未钉住时）：移入悬浮球/面板展开，移出收起
-      fab.addEventListener('mouseenter', function () { if (!pinned) setCollapsed(false) })
-      panel.addEventListener('mouseleave', function () { if (!pinned) setCollapsed(true) })
-      fab.addEventListener('mouseleave', function () { if (!pinned) setCollapsed(true) })
+      // hover 展开/收起（未钉住）——root 容器判定 + 150ms 防抖：
+      // 展开瞬间 fab display:none 会触发 fab 的 mouseleave（闪烁根因），
+      // 因此收起只看「离开整个 root」（panel+fab 都在 root 内，鼠标在两者
+      // 间移动不触发）；延迟收起给鼠标移回留缓冲。
+      var hideTimer: ReturnType<typeof setTimeout> | null = null
+      var scheduleCollapse = function () {
+        if (pinned) return
+        if (hideTimer !== null) clearTimeout(hideTimer)
+        hideTimer = setTimeout(function () { setCollapsed(true) }, 150)
+      }
+      var cancelCollapse = function () {
+        if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null }
+      }
+      fab.addEventListener('mouseenter', function () { cancelCollapse(); if (!pinned) setCollapsed(false) })
+      root.addEventListener('mouseenter', cancelCollapse)
+      root.addEventListener('mouseleave', scheduleCollapse)
 
       // 拖拽移动（柄 = head；mousedown 后跟随指针，结束存位置）
       var dragging: { dx: number; dy: number } | null = null
