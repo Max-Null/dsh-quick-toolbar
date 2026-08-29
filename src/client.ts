@@ -243,8 +243,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
       '#ssid-toolbar .ssid-tb-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-btn svg,#ssid-toolbar .ssid-tb-min svg{flex:none;width:15px;height:15px}',
       '#ssid-toolbar .ssid-tb-btn svg{color:var(--dsw-alias-label-secondary,#98a2b3)}',
-      '#ssid-toolbar .ssid-tb-min{width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);color:var(--dsw-alias-label-primary,#d8e0ea);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3)}',
-      '#ssid-toolbar .ssid-tb-min:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
+      '#ssid-toolbar .ssid-tb-min{width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);color:var(--dsw-alias-label-primary,#d8e0ea);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.85;transition:opacity .15s}',
+      '#ssid-toolbar .ssid-tb-min:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-min svg{width:16px;height:16px}',
       '#ssid-toolbar .ssid-tb-close{margin-left:auto}',
     ].join('\n')
@@ -365,7 +365,17 @@ import { runAdapter, type ActEnv } from './engine.ts'
       }
       var pos = null
       try { pos = JSON.parse(localStorage.getItem(TOOLBAR_POS_KEY) || 'null') } catch (_e) {}
-      applyPos(pos ? pos.x : null, pos ? pos.y : null)
+      // v1.4：位置格式迁移为 { side: 'left'|'right', y }（吸附边缘后持久化）；
+      // 旧的 { x, y } 格式仍兼容（自由定位恢复）。
+      if (pos && typeof pos === 'object' && 'side' in pos) {
+        var vh0 = window.innerHeight
+        var y0 = Math.max(4, Math.min(typeof pos.y === 'number' ? pos.y : 16, vh0 - (root.offsetHeight || 220) - 4))
+        if (pos.side === 'left') { root.style.left = '16px'; root.style.right = '' }
+        else { root.style.left = ''; root.style.right = '16px' }
+        root.style.top = y0 + 'px'; root.style.bottom = ''
+      } else {
+        applyPos(pos ? pos.x : null, pos ? pos.y : null)
+      }
       var collapsed = false
       try { collapsed = localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === '1' } catch (_e) {}
       setCollapsed(collapsed)
@@ -388,10 +398,16 @@ import { runAdapter, type ActEnv } from './engine.ts'
           dragging = null
           document.removeEventListener('mousemove', onMove)
           document.removeEventListener('mouseup', onUp)
-          try {
-            var r = root.getBoundingClientRect()
-            localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }))
-          } catch (_e) {}
+          // v1.4：iOS 小白点式吸附——松手贴最近边缘（16px），y 保持
+          var vw = window.innerWidth
+          var vh = window.innerHeight
+          var r = root.getBoundingClientRect()
+          var side = r.left + r.width / 2 < vw / 2 ? 'left' : 'right'
+          var y = Math.max(4, Math.min(r.top, vh - r.height - 4))
+          if (side === 'left') { root.style.left = '16px'; root.style.right = '' }
+          else { root.style.left = ''; root.style.right = '16px' }
+          root.style.top = y + 'px'; root.style.bottom = ''
+          try { localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ side: side, y: Math.round(y) })) } catch (_e) {}
         }
         document.addEventListener('mousemove', onMove)
         document.addEventListener('mouseup', onUp)
