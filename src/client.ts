@@ -241,10 +241,10 @@ import { runAdapter, type ActEnv } from './engine.ts'
       '#ssid-toolbar{position:fixed;z-index:9999;font-family:system-ui,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;box-sizing:border-box;width:36px;height:36px;border-radius:18px;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);box-shadow:0 4px 16px rgba(0,0,0,.3);overflow:hidden;transition:width .28s cubic-bezier(.25,.8,.25,1),height .28s cubic-bezier(.25,.8,.25,1),left .28s cubic-bezier(.25,.8,.25,1),top .28s cubic-bezier(.25,.8,.25,1),border-radius .28s cubic-bezier(.25,.8,.25,1)}',
       '#ssid-toolbar *{box-sizing:border-box}',
       '#ssid-toolbar.ssid-tb-expanded{border-radius:12px}',
-      '#ssid-toolbar .ssid-tb-ball{position:absolute;left:0;top:0;width:36px;height:36px;border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.85;transition:opacity .18s ease}',
-      '#ssid-toolbar .ssid-tb-ball svg{width:16px;height:16px}',
-      '#ssid-toolbar .ssid-tb-ball:hover{opacity:1}',
-      '#ssid-toolbar.ssid-tb-expanded .ssid-tb-ball{opacity:0;pointer-events:none}',
+      // 球图标层：独立于壳（fixed 于球位、pointer-events 穿透）——morph 时
+      // 图标停在原位淡出，壳从球位向面板位长开；面板位置公式保证球位 ⊂ 面板一角。
+      '#ssid-toolbar-ball{position:fixed;z-index:10000;width:36px;height:36px;pointer-events:none;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-primary,#d8e0ea);opacity:.9;transition:opacity .18s ease}',
+      '#ssid-toolbar-ball svg{width:16px;height:16px}',
       // 面板内容层：壳内自然尺寸（供壳 morph 测量）；背景视觉全在壳上
       '#ssid-toolbar .ssid-tb-panel{position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:4px;padding:6px;color:var(--dsw-alias-label-primary,#d8e0ea)}',
       '#ssid-toolbar .ssid-tb-panel>*{opacity:0;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease}',
@@ -347,6 +347,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
       }
       var ball = document.createElement('button')
       ball.type = 'button'
+      ball.id = TOOLBAR_ID + '-ball'
       ball.className = 'ssid-tb-ball'
       ball.setAttribute('aria-label', '展开快捷工具栏')
       ball.title = 'SSiD 快捷工具栏'
@@ -354,12 +355,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
       trackLocale(ball, 'tb.expandAria', 'aria')
       trackLocale(ball, 'tb.title', 'title')
       root.appendChild(panel)
-      root.appendChild(ball)
       document.body.appendChild(root)
+      document.body.appendChild(ball)
 
-      // ---- 球↔面板 morph（v1.8）：壳 = root，唯一锚点 = 球位（收起态左上角）----
-      // 收起：36x36 圆；展开：壳尺寸/位置/圆角四态过渡成面板矩形（内容自然
-      // 尺寸测量）；ball 图标钉在壳内球位，随壳移动到面板角淡出。
+      // ---- 球↔面板 morph（v1.9）：壳 = root，唯一锚点 = 球位（收起态左上角）----
+      // 收起：36x36 圆；展开：面板位置公式保证「球位 ⊂ 面板一角」（球就是面板
+      // 的角，不再斜对角相切）——球图标独立 fixed 层停在原位淡出，壳长宽展开。
       var BALL_SIZE = 36
       var BALL_R = 18
       var expanded = false
@@ -380,24 +381,29 @@ import { runAdapter, type ActEnv } from './engine.ts'
       ballY = Math.max(4, Math.min(ballY, window.innerHeight - BALL_SIZE - 4))
       root.style.left = ballX + 'px'
       root.style.top = ballY + 'px'
+      ball.style.left = ballX + 'px'
+      ball.style.top = ballY + 'px'
 
-      // 面板展开位置：优先朝屏幕中心方向长（球在右→面板向左；下方空间足→向下）
+      // 面板展开位置：优先朝屏幕中心方向长（球在右→面板向左；下方空间足→向下）；
+      // 无论哪个方向，球位都重叠为面板的一个角（不再边缘相切对角分离）。
       var panelPlacement = function (W: number, H: number) {
         var vw = window.innerWidth, vh = window.innerHeight
         var cx = ballX + BALL_R, cy = ballY + BALL_R
         var hor = cx + BALL_R + W <= vw - 8 ? 'right' : 'left'
         var vert = cy + BALL_R + H <= vh - 8 ? 'down' : 'up'
-        var left = hor === 'right' ? cx + BALL_R : cx - BALL_R - W
-        var top = vert === 'down' ? cy + BALL_R : cy - BALL_R - H
+        var left = hor === 'right' ? ballX : ballX + BALL_SIZE - W
+        var top = vert === 'down' ? ballY : ballY + BALL_SIZE - H
         left = Math.max(4, Math.min(left, vw - W - 4))
         top = Math.max(4, Math.min(top, vh - H - 4))
         lastDir = { hor: hor, vert: vert }
         return { left: left, top: top }
       }
 
-      // 收起/展开（状态持久化）：壳尺寸/位置/圆角过渡 + 子项 stagger 淡入
+      // 收起/展开（状态持久化）：壳尺寸/位置/圆角过渡 + 子项 stagger 淡入；
+      // 球图标固定于球位（展开淡出、收起淡回）。
       var setCollapsed = function (collapsed: boolean) {
         expanded = !collapsed
+        ball.style.opacity = collapsed ? '' : '0'
         if (collapsed) {
           root.classList.remove('ssid-tb-expanded')
           root.style.width = BALL_SIZE + 'px'
@@ -450,15 +456,15 @@ import { runAdapter, type ActEnv } from './engine.ts'
         applyPin()
         setCollapsed(pinned ? false : true)
       })
-      // hover 展开/收起（未钉住）——「鼠标点 + 壳膨胀区」判定：morph 过渡中
-      // 壳边界时刻移动，仅靠 mouseleave 会误判（鼠标可能瞬时在壳外/球位旁）；
-      // 统一在 mousemove 里按「鼠标是否在壳膨胀区内」调度收起——鼠标不动就
-      // 不触发评估（展开后停在球位/面板角不误收），移动才判定（2026-08-30）。
+      // hover 展开/收起（未钉住）——「鼠标点 + 壳膨胀区」几何统一判定：
+      // 收起态：鼠标进入球区（壳 36x36 + 膨胀）→ 展开；展开态：鼠标在壳
+      // 膨胀区内保持、移出 220ms 后收起。morph 过渡中壳边界移动、球区被
+      // 面板角覆盖，全部由本判定自然兜住（2026-08-30）。
       var hideTimer: ReturnType<typeof setTimeout> | null = null
       var lastMouse = { x: -1, y: -1 }
       var inShellArea = function () {
         var r = root.getBoundingClientRect()
-        var m = 20 // 膨胀半径：覆盖球↔面板间隙与过渡帧
+        var m = 18 // 膨胀半径：覆盖球/面板边缘与过渡帧
         return lastMouse.x >= r.left - m && lastMouse.x <= r.right + m &&
           lastMouse.y >= r.top - m && lastMouse.y <= r.bottom + m
       }
@@ -473,24 +479,32 @@ import { runAdapter, type ActEnv } from './engine.ts'
       document.addEventListener('mousemove', function (ev) {
         lastMouse = { x: ev.clientX, y: ev.clientY }
         if (pinned) return
-        if (!expanded) return
-        if (inShellArea()) cancelCollapse()
-        else scheduleCollapse()
-      })
-      root.addEventListener('mouseenter', function () {
-        cancelCollapse()
-        if (!pinned && !expanded) setCollapsed(false)
+        var inside = inShellArea()
+        if (expanded) {
+          if (inside) cancelCollapse()
+          else scheduleCollapse()
+        } else if (inside) {
+          cancelCollapse()
+          setCollapsed(false)
+        }
       })
 
       // 拖拽移动（柄 = head；mousedown 后跟随指针，结束存位置）
       var dragging: { dx: number; dy: number } | null = null
       head.addEventListener('mousedown', function (ev) {
         if (ev.target === pinBtn) return
-        dragging = { dx: ev.clientX - root.getBoundingClientRect().left, dy: ev.clientY - root.getBoundingClientRect().top }
+        var shellRect = root.getBoundingClientRect()
+        var shellLeft = shellRect.left, shellTop = shellRect.top
+        var ballStartX = ballX, ballStartY = ballY
+        dragging = { dx: ev.clientX - shellRect.left, dy: ev.clientY - shellRect.top }
         ev.preventDefault()
         var onMove = function (mev: MouseEvent) {
           if (!dragging) return
           applyPos(mev.clientX - dragging.dx, mev.clientY - dragging.dy)
+          // 球图标层随组件平移（保持刚性关系；展开态图标不可见，仅同步布局）
+          var r = root.getBoundingClientRect()
+          ball.style.left = (ballStartX + r.left - shellLeft) + 'px'
+          ball.style.top = (ballStartY + r.top - shellTop) + 'px'
         }
         var onUp = function () {
           dragging = null
@@ -504,6 +518,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
           var vw = window.innerWidth, vh = window.innerHeight
           ballX = Math.max(4, Math.min(Math.round(bx), vw - BALL_SIZE - 4))
           ballY = Math.max(4, Math.min(Math.round(by), vh - BALL_SIZE - 4))
+          ball.style.left = ballX + 'px'
+          ball.style.top = ballY + 'px'
           try {
             localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ x: ballX, y: ballY }))
           } catch (_e) {}
@@ -543,6 +559,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
         if (win.__SSID_SHELL__ !== true) return
         var tb = document.getElementById(TOOLBAR_ID)
         if (tb !== null) tb.remove()
+        var tbBall = document.getElementById(TOOLBAR_ID + '-ball')
+        if (tbBall !== null) tbBall.remove()
         var st = document.querySelector('style[data-dsh-quick-toolbar]') as HTMLElement
         if (st !== null) st.textContent = BASE_CSS + '\n' + SHELL_CSS.join('\n')
       })
