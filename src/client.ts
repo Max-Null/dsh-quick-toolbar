@@ -124,9 +124,10 @@ import { runAdapter, type ActEnv } from './engine.ts'
       return ((document.documentElement.lang || '').toLowerCase().indexOf('zh') === 0)
     }
     var LOCALE_DICT: Record<string, string[]> = {
-      'tb.title': ['思灵快捷工具栏', 'SSiD Quick Toolbar'],
-      'tb.collapse': ['收起', 'Collapse'],
-      'tb.collapseAria': ['收起工具栏', 'Collapse toolbar'],
+      'tb.title': ['快捷工具栏', 'Quick Toolbar'],
+      'tb.pin': ['钉住', 'Pin'],
+      'tb.unpin': ['取消钉住', 'Unpin'],
+      'tb.pinAria': ['钉住/取消钉住', 'Pin/Unpin'],
       'tb.expandAria': ['展开快捷工具栏', 'Expand quick toolbar'],
       'tb.plugin': ['插件中心', 'Plugin center'],
       'tb.sidebar': ['侧栏', 'Sidebar'],
@@ -232,6 +233,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
     var TOOLBAR_ID = 'ssid-toolbar'
     var TOOLBAR_POS_KEY = 'ssid-toolbar-pos'
     var TOOLBAR_COLLAPSED_KEY = 'ssid-toolbar-collapsed'
+    var TOOLBAR_PINNED_KEY = 'ssid-toolbar-pinned'
     var TOOLBAR_CSS = [
       '#ssid-toolbar{position:fixed;z-index:9999;font-family:system-ui,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;box-sizing:border-box}',
       '#ssid-toolbar,#ssid-toolbar *{box-sizing:border-box}',
@@ -258,6 +260,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
         sessions: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 6.5h6M5 9.5h4" stroke-linecap="round"/></svg>',
         collapse: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5.5h10M6.5 8.5h3M8 11.5h1" stroke-linecap="round"/></svg>',
         menu: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M3 8h10M3 11h10" stroke-linecap="round"/></svg>',
+        pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 2.2l4 4-2.6 1.4-1.8 1.8.4 2.6-1.4 1.4-2.6-3L3.9 13l-1-1 3-3.9-3-2.6 1.4-1.4 2.6.4 1.8-1.8z"/></svg>',
       }
       return ICONS[name] || ICONS.grid
     }
@@ -292,19 +295,17 @@ import { runAdapter, type ActEnv } from './engine.ts'
       panel.className = 'ssid-tb-panel'
       var head = document.createElement('div')
       head.className = 'ssid-tb-head'
-      var title = document.createElement('span')
-      title.className = 'ssid-tb-title'
-      trackLocale(title, 'tb.title', 'text')
-      var minBtn = document.createElement('button')
-      minBtn.type = 'button'
-      minBtn.className = 'ssid-tb-min'
-      minBtn.setAttribute('aria-label', '收起工具栏')
-      minBtn.title = '收起'
-      minBtn.innerHTML = toolbarIcon('collapse')
-      trackLocale(minBtn, 'tb.collapseAria', 'aria')
-      trackLocale(minBtn, 'tb.collapse', 'title')
-      head.appendChild(title)
-      head.appendChild(minBtn)
+      // 通用插件：无标题（v0.4 的「思灵工具栏」标题移除——通用化）；
+      // 头部仅「钉住」切换（未钉住=鼠标移出自动收起，移入悬浮球展开）。
+      var pinBtn = document.createElement('button')
+      pinBtn.type = 'button'
+      pinBtn.className = 'ssid-tb-min'
+      pinBtn.setAttribute('aria-label', '钉住/取消钉住')
+      pinBtn.title = '钉住'
+      pinBtn.innerHTML = toolbarIcon('pin')
+      trackLocale(pinBtn, 'tb.pinAria', 'aria')
+      trackLocale(pinBtn, 'tb.pin', 'title')
+      head.appendChild(pinBtn)
       panel.appendChild(head)
       // 工具栏按钮集 = 内置适配器集驱动（v1.3：数据化——按钮列表随适配器，
       // 新增插件适配即自动入栏；kind → 图标/i18n 键映射保持 v0.1.x 语义）。
@@ -354,6 +355,14 @@ import { runAdapter, type ActEnv } from './engine.ts'
         fab.style.display = collapsed ? 'flex' : 'none'
         try { localStorage.setItem(TOOLBAR_COLLAPSED_KEY, collapsed ? '1' : '0') } catch (_e) {}
       }
+      // 钉住（hover 收起优化，2026-08-30 用户拍板）：未钉住=鼠标移出自动收起、
+      // 移入悬浮球展开；钉住=始终展开（状态持久化 ssid-toolbar-pinned）。
+      var pinned = false
+      try { pinned = localStorage.getItem(TOOLBAR_PINNED_KEY) === '1' } catch (_e) {}
+      var applyPin = function () {
+        pinBtn.style.color = pinned ? 'var(--dsw-alias-interactive-accent, #4d9fff)' : ''
+        trackLocale(pinBtn, pinned ? 'tb.unpin' : 'tb.pin', 'title')
+      }
       var applyPos = function (x: number, y: number) {
         var vw = window.innerWidth, vh = window.innerHeight
         var w = root.offsetWidth || 170
@@ -369,16 +378,26 @@ import { runAdapter, type ActEnv } from './engine.ts'
       applyPos(pos ? pos.x : null, pos ? pos.y : null)
       var collapsed = false
       try { collapsed = localStorage.getItem(TOOLBAR_COLLAPSED_KEY) === '1' } catch (_e) {}
-      setCollapsed(collapsed)
+      // 初始：钉住 = 展开；未钉住 = 收起（hover 触发展开）
+      setCollapsed(pinned ? false : true)
+      applyPin()
       applyLocale()
 
-      minBtn.addEventListener('click', function () { setCollapsed(true) })
-      fab.addEventListener('click', function () { setCollapsed(false) })
+      pinBtn.addEventListener('click', function () {
+        pinned = !pinned
+        try { localStorage.setItem(TOOLBAR_PINNED_KEY, pinned ? '1' : '0') } catch (_e) {}
+        applyPin()
+        setCollapsed(pinned ? false : true)
+      })
+      // hover 展开/收起（未钉住时）：移入悬浮球/面板展开，移出收起
+      fab.addEventListener('mouseenter', function () { if (!pinned) setCollapsed(false) })
+      panel.addEventListener('mouseleave', function () { if (!pinned) setCollapsed(true) })
+      fab.addEventListener('mouseleave', function () { if (!pinned) setCollapsed(true) })
 
       // 拖拽移动（柄 = head；mousedown 后跟随指针，结束存位置）
       var dragging: { dx: number; dy: number } | null = null
       head.addEventListener('mousedown', function (ev) {
-        if (ev.target === minBtn) return
+        if (ev.target === pinBtn) return
         dragging = { dx: ev.clientX - root.getBoundingClientRect().left, dy: ev.clientY - root.getBoundingClientRect().top }
         ev.preventDefault()
         var onMove = function (mev: MouseEvent) {
