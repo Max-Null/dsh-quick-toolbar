@@ -32,6 +32,9 @@
  * 「侧边栏自动诊断」同模式。
  */
 
+import { BUILTIN_ADAPTERS, type AdapterDef } from './adapters.ts'
+import { runAdapter, type ActEnv } from './engine.ts'
+
 (window as unknown as { __ModuleLoader__: { load: (definition: unknown) => unknown } }).__ModuleLoader__.load({
   id: '@max-null/dsh-quick-toolbar',
   factory: (require: unknown) => {
@@ -303,12 +306,21 @@
       head.appendChild(title)
       head.appendChild(minBtn)
       panel.appendChild(head)
-      var items = [
-        { kind: 'plugin', label: 'tb.plugin' },
-        { kind: 'sidebar', label: 'tb.sidebar' },
-        { kind: 'bottom', label: 'tb.bottom' },
-        { kind: 'sessions', label: 'tb.sessions' },
-      ]
+      // 工具栏按钮集 = 内置适配器集驱动（v1.3：数据化——按钮列表随适配器，
+      // 新增插件适配即自动入栏；kind → 图标/i18n 键映射保持 v0.1.x 语义）。
+      var TOOLBAR_KIND_BY_ADAPTER: Record<string, string> = {
+        'dsh-plugin-center': 'plugin',
+        'dsh-better-sidebar.sidebar': 'sidebar',
+        'dsh-better-sidebar.bottom': 'bottom',
+        'dsh-session-manager': 'sessions',
+      }
+      var items: Array<{ kind: string; adapter?: AdapterDef }> = []
+      for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
+        var adapter = BUILTIN_ADAPTERS[ai]
+        var kind = TOOLBAR_KIND_BY_ADAPTER[adapter.id]
+        if (kind === undefined) continue // 未映射图标键的适配器暂不入栏
+        items.push({ kind: kind, adapter: adapter })
+      }
       for (var i = 0; i < items.length; i++) {
         var b = document.createElement('button')
         b.type = 'button'
@@ -316,9 +328,9 @@
         b.innerHTML = toolbarIcon(items[i].kind) + '<span></span>'
         b.setAttribute('aria-label', '')
         b.title = ''
-        trackLocale(b, items[i].label, 'text-span')
-        trackLocale(b, items[i].label, 'aria')
-        trackLocale(b, items[i].label, 'title')
+        trackLocale(b, 'tb.' + items[i].kind, 'text-span')
+        trackLocale(b, 'tb.' + items[i].kind, 'aria')
+        trackLocale(b, 'tb.' + items[i].kind, 'title')
         ;(function (kind: string) {
           b.addEventListener('click', function () { toolbarAction(kind) })
         })(items[i].kind)

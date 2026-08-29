@@ -5,9 +5,18 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node"],
-    "noEmit": true
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
