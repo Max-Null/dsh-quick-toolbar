@@ -302,6 +302,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-add{border:1px dashed var(--dsw-alias-border-strong,rgba(128,148,168,.45));background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left;margin-top:2px;transition:color .15s,border-color .15s,background .15s}',
       '#ssid-toolbar .ssid-tb-add:hover{color:var(--dsw-alias-label-primary,#d8e0ea);border-color:var(--dsw-alias-label-secondary,#98a2b3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-add svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
+      // 右键删除菜单（v0.6.0）
+      '.ssid-tb-menu{position:fixed;z-index:10001;background:var(--dsw-alias-surface-float,rgba(24,28,36,.96));border:1px solid var(--dsw-alias-border-strong,rgba(128,148,168,.45));border-radius:8px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.35)}',
+      '.ssid-tb-menu button{border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);border-radius:6px;height:28px;padding:0 14px;font-size:12px;cursor:pointer;white-space:nowrap;text-align:left}',
+      '.ssid-tb-menu button:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -503,6 +507,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
             if (origBtn !== null) origBtn.style.display = 'none'
           } catch (_e) {}
         }
+        return b
       }
       for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
         var adapter = BUILTIN_ADAPTERS[ai]
@@ -510,6 +515,71 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         // 有 kind 映射 → 既有 toolbarAction（i18n 文案）；无映射（如 dsh-settings）
         // → 引擎执行（label/icon 直显；open-settings 语义锚点链）。
         renderButton(adapter, kind !== undefined ? kind : null)
+      }
+      // ── 右键删除菜单（v0.6.0，仅用户适配器）────────────────────────────
+      var adapterMenuEl: HTMLElement | null = null
+      var onMenuOutside = function (e: MouseEvent) {
+        if (adapterMenuEl !== null && !adapterMenuEl.contains(e.target as Node)) closeAdapterMenu()
+      }
+      function closeAdapterMenu() {
+        if (adapterMenuEl !== null && adapterMenuEl.parentNode !== null) adapterMenuEl.parentNode.removeChild(adapterMenuEl)
+        adapterMenuEl = null
+        document.removeEventListener('mousedown', onMenuOutside)
+      }
+      function showAdapterMenu(x: number, y: number, ad: AdapterDef) {
+        closeAdapterMenu()
+        var menu = document.createElement('div')
+        menu.className = 'ssid-tb-menu'
+        var del = document.createElement('button')
+        del.type = 'button'
+        del.textContent = '删除此按钮'
+        del.addEventListener('click', function () { closeAdapterMenu(); removeUserAdapter(ad) })
+        menu.appendChild(del)
+        document.body.appendChild(menu)
+        var w = menu.offsetWidth || 120
+        var h = menu.offsetHeight || 30
+        menu.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + 'px'
+        menu.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px'
+        adapterMenuEl = menu
+        // 延迟挂 outside 关闭（避免本次 contextmenu 冒泡立即误关）
+        setTimeout(function () { document.addEventListener('mousedown', onMenuOutside) }, 0)
+      }
+      function removeUserAdapter(ad: AdapterDef) {
+        // 恢复原按钮显示（渲染时被缺省 hide 隐藏）——删除 = 换位置的反向操作
+        try {
+          var orig = document.querySelector(ad.button) as HTMLElement | null
+          if (orig !== null) orig.style.display = ''
+        } catch (_e) {}
+        fetch('/quick-toolbar/api/adapters')
+          .then(function (r) { return r.json() })
+          .then(function (data: unknown) {
+            var envelope = data !== null && typeof data === 'object' ? data as { ok?: unknown; value?: unknown } : undefined
+            var rows: unknown = envelope !== undefined && envelope.ok === true && envelope.value !== null && typeof envelope.value === 'object'
+              ? (envelope.value as { adapters?: unknown }).adapters
+              : undefined
+            if (!Array.isArray(rows)) return
+            var next = (rows as AdapterDef[]).filter(function (a) { return a.id !== ad.id })
+            return fetch('/quick-toolbar/api/adapters', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ adapters: next }),
+            }).then(function (r) { return r.json() }).then(function (res) {
+              if (res !== null && typeof res === 'object' && (res as { ok?: unknown }).ok === true) {
+                try {
+                  var btn = panel.querySelector('[data-adapter-id="' + ad.id.replace(/"/g, '\\"') + '"]')
+                  if (btn !== null && btn.parentNode === panel) panel.removeChild(btn)
+                } catch (_e) {}
+              }
+            })
+          })
+          .catch(function () {})
+      }
+      function attachAdapterMenu(btn: HTMLElement, ad: AdapterDef) {
+        btn.addEventListener('contextmenu', function (e: MouseEvent) {
+          e.preventDefault()
+          e.stopPropagation()
+          showAdapterMenu(e.clientX, e.clientY, ad)
+        })
       }
       // 用户适配器管线：fetch host API（zod 已校验入项——客户端信任 host 层），
       // 同 id 覆盖（重建按钮、行为按用户 act 执行），无 id 映射→引擎执行；
@@ -532,7 +602,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
                 var old = panel.querySelector('[data-adapter-id="' + user.id.replace(/"/g, '\\"') + '"]')
                 if (old !== null && old.parentNode === panel) panel.removeChild(old)
               } catch (_e) {}
-              renderButton(user, userKind !== undefined ? userKind : null)
+              var userBtn = renderButton(user, userKind !== undefined ? userKind : null)
+              // 右键删除（v0.6.0，仅用户适配器：内置项不渲染删除入口——
+              // 内置在代码里，删除后刷新即回，语义上不可删）
+              userBtn.setAttribute('data-user-adapter', '1')
+              attachAdapterMenu(userBtn, user)
             }
           })
           .catch(function () {})

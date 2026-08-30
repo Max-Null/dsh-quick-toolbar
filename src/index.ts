@@ -31,25 +31,46 @@ const adaptersRouteDefinition = {
   kind: 'exact',
   path: ROUTE_PATH,
   handler: async (
-    req: { method?: string },
+    req: { method?: string; on?: (e: string, cb: (chunk: string) => void) => void },
     res: { writeHead: (n: number, h: Record<string, string>) => void; end: (s: string) => void },
   ): Promise<void> => {
-    if (req.method !== 'GET') {
-      sendJson(res, 405, { ok: false, error: 'method-not-allowed' })
+    if (req.method === 'GET') {
+      try {
+        const raw = readFileSync(ADAPTERS_PATH, 'utf8')
+        const parsed = parseUserAdapters(raw)
+        if (!parsed.ok) {
+          sendJson(res, 200, { ok: false, error: 'invalid-schema', detail: parsed.issues })
+          return
+        }
+        sendJson(res, 200, { ok: true, value: parsed.value })
+      } catch {
+        // 配置文件不存在 = 无用户适配器（合法；客户端只用内置集）
+        sendJson(res, 200, { ok: true, value: { adapters: [] as unknown[] } })
+      }
       return
     }
-    try {
-      const raw = readFileSync(ADAPTERS_PATH, 'utf8')
-      const parsed = parseUserAdapters(raw)
-      if (!parsed.ok) {
-        sendJson(res, 200, { ok: false, error: 'invalid-schema', detail: parsed.issues })
-        return
+    if (req.method === 'POST') {
+      // 全量替换写回（v0.6.0 右键删除走此通道）：zod 校验 → 原子写（原样保留
+      // 用户/LLM 手写格式区别于 parse 后 stringify 的紧凑化）。
+      let raw = ''
+      req.on?.('data', (chunk: string) => { raw += chunk })
+      await new Promise<void>((resolve) => req.on?.('end', () => { resolve() }))
+      try {
+        const parsed = parseUserAdapters(raw)
+        if (!parsed.ok) {
+          sendJson(res, 200, { ok: false, error: 'invalid-schema', detail: parsed.issues })
+          return
+        }
+        const tmp = ADAPTERS_PATH + '.tmp'
+        writeFileSync(tmp, raw, 'utf8')
+        renameSync(tmp, ADAPTERS_PATH)
+        sendJson(res, 200, { ok: true, value: parsed.value })
+      } catch {
+        sendJson(res, 200, { ok: false, error: 'write-failed' })
       }
-      sendJson(res, 200, { ok: true, value: parsed.value })
-    } catch {
-      // 配置文件不存在 = 无用户适配器（合法；客户端只用内置集）
-      sendJson(res, 200, { ok: true, value: { adapters: [] as unknown[] } })
+      return
     }
+    sendJson(res, 405, { ok: false, error: 'method-not-allowed' })
   },
 }
 

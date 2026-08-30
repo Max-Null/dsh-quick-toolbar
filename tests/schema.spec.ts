@@ -58,3 +58,15 @@ test('parseUserAdapters: 「换位置」最小注册（仅 id+button）通过—
     assert.equal(a.act, undefined)
   }
 })
+
+test('parseUserAdapters: 空 adapters 数组 → 合法（右键删除全部后的写回形态）', () => {
+  const r = parseUserAdapters(JSON.stringify({ adapters: [] }))
+  assert.equal(r.ok, true)
+  if (r.ok) assert.equal(r.value.adapters.length, 0)
+})
+
+test('parseUserAdapters: hide:false 显式保留 → 合法（换位置语义例外）', () => {
+  const r = parseUserAdapters(JSON.stringify({ adapters: [{ id: 'keep', button: '.k', hide: false }] }))
+  assert.equal(r.ok, true)
+  if (r.ok) assert.equal(r.value.adapters[0]!.hide, false)
+})
