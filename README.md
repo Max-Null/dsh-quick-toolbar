@@ -25,17 +25,20 @@ dsh plugin --profile web add @max-null/dsh-quick-toolbar
 
 ## 使用
 
-- **聚合按钮**：标题栏/悬浮球点开面板 → 一键触发各插件功能（再点关闭——会话管理探测弹窗关闭按钮）。
-- **用户适配器**：复制 `adapters.prompt.md` + 环境描述 → 让 LLM 生成 `{ "adapters": [...] }` → 写入 `~/.dsh/quick-toolbar-adapters.json` → 重启/热载生效（schema 校验，非法条目丢弃并报明细）。
+- **聚合按钮**：标题栏/悬浮球点开面板 → 一键触发各插件功能（再点关闭——会话管理探测弹窗关闭按钮；设置面板语义锚点打开/再点关闭）。
+- **内置入口**：悬浮球含「设置」（官方设置面板：引擎按语义锚点定位 footer 触发器，双 locale；再点关闭——DSH trigger 原生只开不关）。
+- **壳环境（SSiD）**：悬浮球默认隐藏（标题栏接管入口）；标题栏「悬浮球」开关按钮（圆圈+圆点图标）可开启。
+- **用户适配器**：复制 `adapters.prompt.md` + 环境描述 → 让 LLM 生成 `{ "adapters": [...] }` → 写入 `~/.dsh/quick-toolbar-adapters.json` → 刷新页面生效（host API 校验，非法条目丢弃并报明细）。
 - 定位失败/插件未装/被禁用 → 静默跳过（绝不误伤、绝不误点）。
+- **状态持久化**：位置/钉住/折叠/壳开关走 host（`/quick-toolbar/api/state` → `~/.dsh/quick-toolbar-state.json`，SSiD 开发手册 §7.10 规则）——内核动态端口不再丢状态。
 
 ## 架构
 
 - `src/adapters.ts`：适配器 schema + 内置适配器集（黄金示例）
-- `src/behaviors.ts`：行为库（click / toggle-panel / dispatch-event / open-settings / command）
+- `src/behaviors.ts`：行为库（click / toggle-panel / dispatch-event / open-settings（语义锚点+再点关闭）/ command（composer 注入）——全部实现，v2 M1）
 - `src/engine.ts`：执行器（防御执行）
 - `src/schema.ts`：用户配置 zod 校验（LLM 产物防线）
-- `src/index.ts`：host 半 `GET /quick-toolbar/api/adapters`
+- `src/index.ts`（host 半）：`GET /quick-toolbar/api/adapters`（用户适配器）+ `GET/POST /quick-toolbar/api/state`（状态 host 化，原子写）
 - 设计文档：`doc/设计/2026-08-30-quick-toolbar-独立化设计方案.md`、`doc/设计/2026-08-30-quick-toolbar-v2设计.md`
 
 ## 开发
