@@ -103,7 +103,8 @@ test('actOpenSettings: 锚点链命中（中文 aria-local）先命中即点', (
   }
   assert.equal(actOpenSettings(env), true)
   assert.equal(btn.clicked, 1)
-  assert.equal(hits[0], '[class$="_trigger"]') // 锚点链首位 = footer trigger 类
+  assert.equal(hits[0], '[class$="_mask"]') // 首探 = 面板开状态（mask）
+  assert.equal(hits[1], '[class$="_trigger"]') // 关态 → 锚点链首位 = footer trigger 类
 })
 
 test('actOpenSettings: findByText 语义定位优先（footer trigger 无 aria）', () => {
@@ -126,6 +127,25 @@ test('actOpenSettings: findByText 未命中 → 锚点链兜底', () => {
   }
   assert.equal(actOpenSettings(env), true)
   assert.equal(bySelector.clicked, 1)
+})
+
+test('actOpenSettings: 面板开着（mask 存在）→ 点关闭按钮（再点关闭）', () => {
+  const closeBtn = makeClickable()
+  const mask = makeClickable()
+  const env = {
+    find: (sel: string) =>
+      sel === '[class$="_mask"]' ? mask : sel === 'button[class$="_close"]' ? closeBtn : null,
+  }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(closeBtn.clicked, 1)
+  assert.equal(mask.clicked, 0)
+})
+
+test('actOpenSettings: 面板开着但关闭按钮缺失 → mask 兜底点（onClick=onClose）', () => {
+  const mask = makeClickable()
+  const env = { find: (sel: string) => (sel === '[class$="_mask"]' ? mask : null) }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(mask.clicked, 1)
 })
 
 test('actOpenSettings: 中文未命中 → 英文锚点回退命中', () => {

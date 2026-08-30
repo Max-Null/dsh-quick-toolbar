@@ -1,6 +1,6 @@
 {
   "name": "@max-null/dsh-quick-toolbar",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "插件按钮聚合器：聚合三方插件散乱按钮（插件中心/侧栏/底栏/会话管理…）到统一入口——SSiD 标题栏 / web 悬浮球（iOS 小白点式）；适配器驱动，内置适配集；LLM 可生成适配（驻场工程师模式）",
   "type": "module",
   "main": "lib/index.js",

@@ -75,6 +75,17 @@ export const SETTINGS_ANCHORS = [
   'button[title="Settings"]',
 ] as const
 
+/** 官方设置关闭目标锚点链（面板开着时二次点击应关闭——trigger onClick 只
+ *  setOpen(true) 原生不 toggle，2026-08-30 用户实测「再点关闭失败」）。 */
+export const SETTINGS_CLOSE_ANCHORS = [
+  'button[class$="_close"]',
+  'button[aria-label="关闭"]',
+  'button[title="关闭"]',
+] as const
+
+/** 设置面板打开判定（modal mask；SettingsRoot.tsx：mask div onClick=onClose）。 */
+export const SETTINGS_MASK_SELECTOR = '[class$="_mask"]'
+
 /** 设置按钮定位环境（锚点链第一条命中即点；未见则 false = 插件未装/改版防御）。 */
 export interface SettingsEnv {
   find(selector: string): Clickable | null
@@ -82,8 +93,22 @@ export interface SettingsEnv {
   findByText?(texts: readonly string[]): Clickable | null
 }
 
-/** 打开官方设置面板：文本语义定位优先（footer trigger）→ 锚点链兜底。 */
+/** 打开/关闭官方设置面板：开着（mask 存在）→ 关闭（close 按钮 → mask 兜底）；
+ *  关着 → 文本语义定位优先（footer trigger）→ 锚点链兜底。 */
 export function actOpenSettings(env: SettingsEnv): boolean {
+  // 再点关闭路径（原生 trigger 只开不关——2026-08-30 用户实测）
+  const mask = env.find(SETTINGS_MASK_SELECTOR)
+  if (mask !== null && mask !== undefined) {
+    for (let i = 0; i < SETTINGS_CLOSE_ANCHORS.length; i++) {
+      const closeBtn = env.find(SETTINGS_CLOSE_ANCHORS[i])
+      if (closeBtn !== null && closeBtn !== undefined && closeBtn.disabled !== true) {
+        closeBtn.click()
+        return true
+      }
+    }
+    mask.click()
+    return true
+  }
   if (env.findByText !== undefined) {
     const byText = env.findByText(['设置', 'Settings'])
     if (byText !== null && byText !== undefined && byText.disabled !== true) {
