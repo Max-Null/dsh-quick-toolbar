@@ -234,11 +234,42 @@ import { runAdapter, type ActEnv } from './engine.ts'
     var TOOLBAR_POS_KEY = 'ssid-toolbar-pos'
     var TOOLBAR_COLLAPSED_KEY = 'ssid-toolbar-collapsed'
     var TOOLBAR_PINNED_KEY = 'ssid-toolbar-pinned'
-    // 壳环境悬浮球开关（2026-08-30 用户拍板：SSiD 标题栏加开关——悬浮球默认隐藏，
-    // 标题栏「悬浮球」按钮开启（持久化）——ssid:titlebar detail='quick-toolbar-toggle'）。
-    var TOOLBAR_SHELL_VISIBLE_KEY = 'ssid-toolbar-shell-visible'
-    var shellFloatVisible = function () {
-      try { return localStorage.getItem(TOOLBAR_SHELL_VISIBLE_KEY) === '1' } catch (_e) { return false }
+    // 状态 host 化（2026-08-30 手册 §7.10 规则：动态端口下页面 localStorage 按
+    // origin 隔离、跨重启必丢）——持久状态存 ~/.dsh/quick-toolbar-state.json，
+    // 经 host 半 /quick-toolbar/api/state 桥读写；页面 localStorage 不再用于持久态。
+    var qtState = {
+      pos: null as { x: number; y: number } | null,
+      collapsed: true,
+      pinned: false,
+      shellVisible: false,
+    }
+    var loadState = function (done: () => void) {
+      fetch('/quick-toolbar/api/state')
+        .then(function (r) { return r.json() })
+        .then(function (data: unknown) {
+          var s = data !== null && typeof data === 'object' && (data as { ok?: unknown }).ok === true
+            ? (data as { state?: { pos?: { x: number; y: number } | null; collapsed?: boolean; pinned?: boolean; shellVisible?: boolean } }).state
+            : undefined
+          if (s !== undefined && s !== null) {
+            if (s.pos !== null && s.pos !== undefined && typeof s.pos.x === 'number' && typeof s.pos.y === 'number') {
+              qtState.pos = { x: s.pos.x, y: s.pos.y }
+            }
+            if (typeof s.collapsed === 'boolean') qtState.collapsed = s.collapsed
+            if (typeof s.pinned === 'boolean') qtState.pinned = s.pinned
+            if (typeof s.shellVisible === 'boolean') qtState.shellVisible = s.shellVisible
+          }
+          done()
+        })
+        .catch(function () { done() })
+    }
+    var saveState = function () {
+      try {
+        void fetch('/quick-toolbar/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(qtState),
+        }).catch(function () {})
+      } catch (_e) {}
     }
     var TOOLBAR_CSS = [
       // 壳 = 球↔面板一体（v1.8 morph）：收起 36px 圆、展开面板矩形，
@@ -348,8 +379,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
 
     function createToolbar() {
       // 壳环境（__SSID_SHELL__）：悬浮球默认隐藏（标题栏接管入口），
-      // 用户可从标题栏「悬浮球」按钮开启（持久化 ssid-toolbar-shell-visible）。
-      if (win.__SSID_SHELL__ === true && !shellFloatVisible()) return
+      // 用户可从标题栏「悬浮球」按钮开启（状态 host 化——手册 §7.10）。
+      if (win.__SSID_SHELL__ === true && !qtState.shellVisible) return
       if (document.getElementById(TOOLBAR_ID) !== null) return
       var root = document.createElement('div')
       root.id = TOOLBAR_ID
@@ -464,13 +495,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
       var BALL_R = 18
       var expanded = false
       var ballX = 0, ballY = 0 // 球壳左上角（收起态位置——唯一锚点）
-      try {
-        var savedPos = JSON.parse(String(localStorage.getItem(TOOLBAR_POS_KEY) || 'null'))
-        if (savedPos !== null && typeof savedPos.x === 'number' && typeof savedPos.y === 'number') {
-          ballX = savedPos.x
-          ballY = savedPos.y
-        }
-      } catch (_e) {}
+      if (qtState.pos !== null) { ballX = qtState.pos.x; ballY = qtState.pos.y }
       if (ballX === 0 && ballY === 0) {
         ballX = window.innerWidth - BALL_SIZE - 16
         ballY = window.innerHeight - BALL_SIZE - 16
@@ -548,12 +573,13 @@ import { runAdapter, type ActEnv } from './engine.ts'
         for (var ki = 0; ki < kids.length; ki++) {
           ;(kids[ki] as HTMLElement).style.transitionDelay = collapsed ? '0ms' : 40 + ki * 24 + 'ms'
         }
-        try { localStorage.setItem(TOOLBAR_COLLAPSED_KEY, collapsed ? '1' : '0') } catch (_e) {}
+        qtState.collapsed = collapsed
+        saveState()
       }
       // 钉住（hover 收起优化，2026-08-30 用户拍板）：未钉住=鼠标移出自动收起、
       // 移入悬浮球展开；钉住=始终展开（状态持久化 ssid-toolbar-pinned）。
       var pinned = false
-      try { pinned = localStorage.getItem(TOOLBAR_PINNED_KEY) === '1' } catch (_e) {}
+      pinned = qtState.pinned
       var applyPin = function () {
         pinBtn.style.color = pinned ? 'var(--dsw-alias-interactive-accent, #4d9fff)' : ''
         pinBtn.style.opacity = pinned ? '1' : ''
@@ -577,7 +603,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
 
       pinBtn.addEventListener('click', function () {
         pinned = !pinned
-        try { localStorage.setItem(TOOLBAR_PINNED_KEY, pinned ? '1' : '0') } catch (_e) {}
+        qtState.pinned = pinned
+        saveState()
         applyPin()
         setCollapsed(pinned ? false : true)
       })
@@ -639,9 +666,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
           ballY = Math.max(4, Math.min(Math.round(sp.by), vh - BALL_SIZE - 4))
           ball.style.left = ballX + 'px'
           ball.style.top = ballY + 'px'
-          try {
-            localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify({ x: ballX, y: ballY }))
-          } catch (_e) {}
+          qtState.pos = { x: ballX, y: ballY }
+          saveState()
         }
         document.addEventListener('mousemove', onMove)
         document.addEventListener('mouseup', onUp)
@@ -668,7 +694,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
       tbStyle.setAttribute('data-dsh-quick-toolbar-toolbar', '')
       tbStyle.textContent = TOOLBAR_CSS
       document.head.appendChild(tbStyle)
-      createToolbar()
+      // 状态 host 化加载（手册 §7.10）：网络往返（本地 <10ms）完成后创建——
+      // 球位/钉住/折叠/壳开关按持久状态渲染；壳默认隐藏（开关开启才创建）。
+      loadState(function () {
+        if (win.__SSID_SHELL__ === true && !qtState.shellVisible) return
+        createToolbar()
+      })
 
       // 壳标志（win.__SSID_SHELL__）由 main.mjs 在 dom-ready 注入，晚于
       // 本插件 apply——页面早期创建的元素/样式按壳环境兜底修正：
@@ -679,7 +710,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
       var hideIfShell = function () {
         if (win.__SSID_SHELL__ !== true) return false
         // 标题栏「悬浮球」开关开启 → 壳中保留悬浮球（2026-08-30 用户拍板）
-        if (shellFloatVisible()) return false
+        if (qtState.shellVisible) return false
         var tb = document.getElementById(TOOLBAR_ID)
         if (tb !== null) tb.remove()
         var tbBall = document.getElementById(TOOLBAR_ID + '-ball')
@@ -712,8 +743,9 @@ import { runAdapter, type ActEnv } from './engine.ts'
         // 标题栏「悬浮球」开关（2026-08-30 用户拍板）：切换壳环境浮球显示并持久化。
         // 开启 → 创建工具栏（若被壳隐藏则重建）；关闭 → 移除元素（localStorage '0'）。
         if (detail === 'quick-toolbar-toggle') {
-          var nextOn = !shellFloatVisible()
-          try { localStorage.setItem(TOOLBAR_SHELL_VISIBLE_KEY, nextOn ? '1' : '0') } catch (_e) {}
+          var nextOn = !qtState.shellVisible
+          qtState.shellVisible = nextOn
+          saveState()
           if (nextOn) {
             createToolbar()
           } else {
