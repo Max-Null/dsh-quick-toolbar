@@ -302,14 +302,13 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-add{border:1px dashed var(--dsw-alias-border-strong,rgba(128,148,168,.45));background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left;margin-top:2px;transition:color .15s,border-color .15s,background .15s}',
       '#ssid-toolbar .ssid-tb-add:hover{color:var(--dsw-alias-label-primary,#d8e0ea);border-color:var(--dsw-alias-label-secondary,#98a2b3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-add svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
-      // 滑动删除行（v0.7.0，iOS 样式）：行容器 overflow 裁剪，按钮左滑露出红色删除块；
-      // 背景/文字用 DSH 官方 token（light/dark 双值自适应）
+      // 滑动删除行（v0.7.2，iOS 样式）：壳 DOM = 按钮+删除块一起左右滑；
+      // 壳宽 = 行宽+56（删除块初始在视口外，被容器 overflow 裁切）
       '.ssid-tb-row{position:relative;overflow:hidden;border-radius:8px}',
-      // 按钮铺满行宽（行宽=面板宽）：左移 56 后右端恰好贴红块左缘，无空隙无重叠
-      '.ssid-tb-row .ssid-tb-btn{position:relative;z-index:1;width:100%;box-sizing:border-box;transition:transform .18s ease;background:transparent}',
-      '.ssid-tb-row .ssid-tb-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(128,148,168,.14))}',
-      '.ssid-tb-row.ssid-tb-row-open .ssid-tb-btn{transform:translateX(-56px)}',
-      '.ssid-tb-del{position:absolute;right:0;top:0;bottom:0;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;border-radius:8px;font-weight:500}',
+      '.ssid-tb-slide{display:flex;width:calc(100% + 56px);transition:transform .2s ease}',
+      '.ssid-tb-row .ssid-tb-btn{flex:1 1 auto;position:relative;z-index:1;box-sizing:border-box}',
+      '.ssid-tb-row.ssid-tb-row-open .ssid-tb-slide{transform:translateX(-56px)}',
+      '.ssid-tb-del{flex:none;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;font-weight:500}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -563,29 +562,33 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           })
           .catch(function () {})
       }
-      // 用户适配器按钮包行容器（带右滑删除红块），右键触发左滑
+      // 用户适配器按钮包行容器（壳 DOM：按钮+删除块一起左右滑，iOS 滑动删除态）
       function wrapAdapterRow(btn: HTMLElement, ad: AdapterDef) {
         var row = document.createElement('div')
         row.className = 'ssid-tb-row'
+        var slide = document.createElement('div')
+        slide.className = 'ssid-tb-slide'
         if (btn.parentNode !== null) btn.parentNode.removeChild(btn)
-        row.appendChild(btn)
+        slide.appendChild(btn)
         var delBtn = document.createElement('button')
         delBtn.type = 'button'
         delBtn.className = 'ssid-tb-del'
         delBtn.textContent = '删除'
         delBtn.addEventListener('click', function () {
-          slideCloseAll()
-          removeUserAdapter(ad)
+          // 先播放收回动画（删除块右滑出显示区域），再执行删除
+          row.classList.remove('ssid-tb-row-open')
+          setTimeout(function () { removeUserAdapter(ad) }, 220)
         })
-        row.appendChild(delBtn)
+        slide.appendChild(delBtn)
+        row.appendChild(slide)
         panel.insertBefore(row, addBtn)
         btn.setAttribute('data-user-adapter', '1')
         btn.addEventListener('contextmenu', function (e: MouseEvent) {
           e.preventDefault()
           e.stopPropagation()
           if (row.classList.contains('ssid-tb-row-open')) {
-            // 再右键 = 收起（toggle）
-            slideCloseAll()
+            // 再右键 = 收回（toggle）
+            row.classList.remove('ssid-tb-row-open')
             return
           }
           slideCloseAll()
