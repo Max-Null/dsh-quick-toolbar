@@ -311,8 +311,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
       return ICONS[name] || ICONS.grid
     }
 
-    // v2 M1 引擎环境：find/dispatch ← DOM；runCommand ← composer 输入模拟
-    // （DSH master 的 remote.commands.execute 需会话作用域 ctx——M2 深整合时接入）。
+    // v2 M1 引擎环境：find/dispatch ← DOM；runCommand ← composer 草稿注入
+    // （execute 通道不可达——实证决策见下注释；注入不自动提交）。
     var toolbarEnv = function (): ActEnv {
       return {
         find: function (s) { return document.querySelector(s) as HTMLElement | null },
@@ -334,8 +334,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
         runCommand: function (name) { return typeCommandIntoComposer(name) },
       }
     }
-    // composer 输入模拟：写入 `/name` + InputEvent + Enter（React 受控 textarea /
-    // contenteditable 双形态；定位失败 → false 静默防御）。
+    // command 通道（2026-08-30 实证决策）：DSH master `ctx.remote.commands.execute`
+    // 需完整 client ctx，而 V0 协议 apply 收到的 ctx 仅 {fiber}——execute 不可达。
+    // 设计修正：command = composer 草稿注入（不自动提交——用户确认后发送，
+    // 避免误发；与 V2-2「建议制」一致）。设计文档 A2 已同步。
+    // composer 草稿注入：写入 `/name` + InputEvent + focus（**不自动提交**——
+    // 用户确认后发送，避免误发命令；定位失败 → false 静默防御）。
     function typeCommandIntoComposer(name: string) {
       var seat = document.querySelector('[data-composer-seat]')
       var el = (seat !== null && seat !== undefined
@@ -354,7 +358,6 @@ import { runAdapter, type ActEnv } from './engine.ts'
       }
       el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
       el.focus()
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }))
       return true
     }
 

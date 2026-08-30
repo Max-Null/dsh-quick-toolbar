@@ -36,7 +36,9 @@
 
 目标：适配「触发 dsh-commands 文本命令」类按钮。v1 定义 `{ kind: 'command', name: string }`。
 
-**实现状态（2026-08-30 M1 落地）**：通道 2（输入模拟）已实现；**通道 1（`remote.commands.execute` 主通道）尚未接入**——M1 时判定会话作用域 ctx 依赖未验证，暂以输入模拟交付（偏差记录见 §M1-rec）。**本里程碑补齐主通道**：sessionId 从 DSH 官方当前会话投影读取（`dsh.sessions.current`，查证后接入），execute 优先、失败回退输入模拟。依赖面见下：
+**最终实现（2026-08-30 实证决策）**：**composer 草稿注入**——写入 `/name` 到 composer（InputEvent + focus），**不自动提交**（用户确认后发送，避免误发；与 V2-2「建议制」一致）。
+- **execute 主通道不可达（已实证）**：`ctx.remote.commands.execute(sessionId, line)` 需完整 client ctx（cordis 服务面），而 **V0 协议 apply 收到的 ctx 仅 `{ fiber }`**（2026-08-30 运行时日志实证；无 remote）——主通道在 V0 协议下不可达；迁移 clientBundle 协议（M3 壳拆分范畴）前维持草稿注入。
+- 语义：行为 = 引擎能力（注入草稿），适配器 = 数据（`{ kind: 'command', name }`）——不变。历史记录见 M1-rec（偏差 1 关闭于本决策）。
 
 **调研点② 结论（2026-08-30 已查证 DSH master 源码）**：`dsh-commands` 是**官方包** `@deepseek-ai/dsh-commands`（`packages/interaction/commands`），命令经 `packages/client/ui-commands`（`CommandUiRuntime`）暴露 client 面：
 
