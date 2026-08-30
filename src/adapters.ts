@@ -65,7 +65,10 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
   {
     id: 'dsh-better-sidebar.sidebar',
     button: '[class*="toggleCluster"]',
-    icon: { source: 'from-button' },
+    // custom 图标（与 better-sidebar 官方 toggle 同款）：from-button 抓取
+    // 会拿到 Cluster 第一个 svg（底栏按钮的 PanelBottom），侧栏/底栏同图
+    // ——2026-08-31 用户反馈「侧栏图标错了」实证后改确定性内建图标。
+    icon: { source: 'custom', value: 'sidebar' },
     label: '侧栏',
     act: { kind: 'dispatch-event', event: 'ssid:titlebar', detail: 'sidebar' },
     hide: true,
@@ -73,7 +76,7 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
   {
     id: 'dsh-better-sidebar.bottom',
     button: '[class*="toggleCluster"]',
-    icon: { source: 'from-button' },
+    icon: { source: 'custom', value: 'bottom' },
     label: '底栏',
     act: { kind: 'dispatch-event', event: 'ssid:titlebar', detail: 'bottom' },
     hide: true,
