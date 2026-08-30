@@ -36,6 +36,8 @@
 
 目标：适配「触发 dsh-commands 文本命令」类按钮。v1 定义 `{ kind: 'command', name: string }`。
 
+**实现状态（2026-08-30 M1 落地）**：通道 2（输入模拟）已实现；**通道 1（`remote.commands.execute` 主通道）尚未接入**——M1 时判定会话作用域 ctx 依赖未验证，暂以输入模拟交付（偏差记录见 §M1-rec）。**本里程碑补齐主通道**：sessionId 从 DSH 官方当前会话投影读取（`dsh.sessions.current`，查证后接入），execute 优先、失败回退输入模拟。依赖面见下：
+
 **调研点② 结论（2026-08-30 已查证 DSH master 源码）**：`dsh-commands` 是**官方包** `@deepseek-ai/dsh-commands`（`packages/interaction/commands`），命令经 `packages/client/ui-commands`（`CommandUiRuntime`）暴露 client 面：
 
 - **host 执行（推荐）**：`ctx.remote.commands.execute(sessionId, line, images?)`（line = `/name args`；命令目录 `ctx.remote.commands.list(sessionId)`）。execute 直接 admit host 命令、durable 记录 `command/run`/`command/done` 生命周期（渲染为持久 flow node，无需额外 UI）；**命令按会话寻址**（sessionId 必填）
@@ -131,3 +133,18 @@
 - M2：B（半自动发现）→ 驻场闭环演示
 - M3：E（壳拆分）→ 独立发版准备
 - M4：C/D（生态与官方整合，视调研结果取舍）
+
+## M1-rec. M1 实际交付记录与偏航（2026-08-30 收尾）
+
+M1 落地期间被真实 bug/需求驱动的**设计外新增**（均已拍板，记录于决策 V2-7/V2-8）：
+
+1. **标题栏「悬浮球」开关**（用户体验后拍板）：SSiD 壳标题栏按钮（圆圈+圆点图标）→ `ssid:titlebar detail='quick-toolbar-toggle'` → 切换壳内浮球显示（默认隐藏，持久化）。`__SSID_SHELL__` 守卫从「无条件隐藏」改「默认隐藏+开关」——**本设计 D 方向（壳适配拆分）的雏形**，M3 拆分时应纳入此契约。
+2. **状态 host 化**（用户规约 §7.10）：pos/collapsed/pinned/shellVisible 持久化从页面 localStorage 迁到 `~/.dsh/quick-toolbar-state.json`（host GET/POST `/quick-toolbar/api/state` 原子写）——**动态端口下 localStorage 跨重启必丢**（两次实踩）。
+3. **ResizeObserver 半宽自愈**：morph 宽度测量早于文本/i18n/字体就位 → 壳宽定格过小（用户实测「钉住只有一半」）——展开态 RO 自动同步壳宽高。
+4. **设置「再点关闭」**：源码查证 `SettingsRoot` trigger 只 `setOpen(true)`（原生不 toggle）——行为库 mask 探测 + close 按钮/mask 兜底（原设计 A1 的「再点关闭探测」实现为 mask 语义）。
+
+**已知债（后续里程碑）**：
+- command 主通道（execute）未接（见 A2 实现状态）
+- 老 4 按钮仍走 legacy `toolbarAction`，内置集“逐步切换引擎”未完成（半接线）
+- 内置「设置」按钮文案硬编码中文（`adapter.label`），未走 trackLocale —— 英文 locale 显示中文（i18n 债）
+- M1 交付打乱原 §0 排序（A 完成后插入了壳集成/持久化），本记录用于对齐设计文档与现实
