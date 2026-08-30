@@ -74,11 +74,15 @@ export const REGISTER_BRIEF = `# 任务：为「工具栏插件」迁移 / 新�
 用你的浏览器能力实测原按钮行为，按结果选 act：
 
 1. 点击一次：开的是**弹窗/面板**还是普通页面？
-2. 弹窗/面板能**再点原按钮关闭**吗？**不能** → act 必须用 \`toggle-panel\` 并
-   探测弹窗内的「关闭」按钮（浏览弹窗 DOM，选准且唯一的选择器写 \`close\`）：
-   \`{\"act\": { \"kind\": \"toggle-panel\", \"close\": \".verified-close\" }}\`——
-   「再点关闭」是载体的基本承诺，\`click\` 只适用于天然可再点切换的按钮。
-3. 记录原按钮是否会在意「隐藏」（见第三步 hide 说明）。
+2. **用 JS \`.click()\` 验证 toggle 性**（DOM 事件触发、穿透遮罩）——Playwright 物理点击
+   可能被弹窗遮罩（backdrop）**拦截而误判**"不能再点关闭"（remote 案例实测：物理点不到
+   ≠ 不能 toggle，JS 点击下原按钮可能是天然开关）：
+   - \`document.querySelector(原按钮选择器).click()\` 连点两次：开→关 → **天然 toggle** → \`click\` 就够；
+   - 仍开→关不掉 → act 用 \`toggle-panel\` 并探测关闭通道（下一步）。
+3. \`toggle-panel\` 关闭通道：**优先 \`secondClick: { "kind": "mask" }\`（点遮罩）——
+   但必须探测验证遮罩点击真的会关闭**（remote 弹窗遮罩实测不响应）；不行换
+   \`{ "kind": "click", "selector": "弹窗内唯一×按钮选择器" }\`。
+4. 记录原按钮是否会在意「隐藏」（见第三步 hide 说明）。
 
 ## 第四步：写入配置，让用户刷新
 

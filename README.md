@@ -4,17 +4,39 @@
 
 This plugin belongs to the **`@max-null/*` family** — a set of plugins that together form the **[SSID (思灵 · Seek Soul in Darkness)](https://github.com/Max-Null/seek-soul-in-darkness)** desktop experience.
 
-面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的**插件按钮聚合器**：把三方插件散乱的按钮（插件中心/侧栏/底栏/会话管理…）聚合到统一入口——SSiD 壳 → 标题栏按钮组；DSH web → **iOS 小白点式悬浮球**（自由定位拖拽、球↔面板 morph 展开、球永远锁定面板屏幕外侧角）。适配器驱动：内置适配集开箱即识；**用户环境下 LLM 按模板生成适配**（驻场工程师模式）——不要求三方插件配合。
+面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的**插件按钮聚合器**：把三方插件散乱的按钮（插件中心/侧栏/底栏/会话管理…）聚合到统一入口——SSiD 壳 → 标题栏按钮组；DSH web → **iOS 小白点式悬浮球**（自由定位拖拽、球↔面板 morph 展开、球永远锁定面板屏幕外侧角）。**核心价值 = 可扩展性**：本插件是「载体」（协议 + 引擎 + 注册表），**每个人都可以把**自己环境里任何插件的按钮**聚合进来**（LLM 一键注册 / 右键删除 = 注册制/注销制，全程不动插件源码、不写一行代码）——不要求第三方插件配合，不需要等作者适配。
 
-A **plugin-button aggregator** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): gathers scattered third-party plugin buttons (plugin center / sidebar / bottom bar / session manager …) into one entry — an SSiD title-bar button group in the SSID shell, and an iOS assistive-touch-style floating ball on plain DSH web (free positioning & dragging, ball↔panel morph expand, ball always locked to the panel's screen-outer corner). Adapter-driven: bundled adapters work out of the box; in any user environment, an LLM generates new adapters from a template (the "on-site engineer" mode) — no cooperation required from third-party plugins.
+A **plugin-button aggregator** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): gathers scattered third-party plugin buttons (plugin center / sidebar / bottom bar / session manager …) into one entry — an SSiD title-bar button group in the SSID shell, and an iOS assistive-touch-style floating ball on plain DSH web (free positioning & dragging, ball↔panel morph expand, ball always locked to the panel's screen-outer corner). **Extensibility is the point**: this plugin is a *carrier* (protocol + engine + registry) — **everyone can register the buttons of any plugin in their own environment** (LLM one-click registration / right-click deregistration; no plugin source touched, no code written, no cooperation required from third-party plugins).
+
+## 理念：载体 + 驻场 LLM——动态聚合，零代码增删
+
+```
+你的环境 = 插件 A · 插件 B · 插件 C（各自散落的按钮）
+        └── 聚合到本工具栏（一个入口）
+                     ▲
+   注册（➕ 一键，LLM 探查+数据注册）/ 注销（右键删除=移除注册）
+```
+
+- **插件 = 载体**：本插件只提供注册协议（字段/校验/引擎行为）与渲染执行器；不内置任何场景适配——场景无限，没有"完美脚本"能预适配所有环境。
+- **适配 = 驻场 LLM 域**：点击 ➕ 发起「添加按钮」会话，环境里的 LLM 自主探查（浏览器/代码能力验证选择器）→ 生成纯数据注册（一条 JSON）。**添加 = 注册制**（不动插件原代码）。
+- **删除 = 注销制**：右键按钮 → 滑出「删除」→ 移除注册、原按钮恢复显示，环境回到未注册原状（零代码残留、零回滚成本）。
+- **人人可用**：你不需要会写插件——告诉 LLM"把某个按钮加进来"，它替你完成全部探查与注册；任何插件的按钮都能聚合，无论是官方的、社区的还是你自己的。
 
 ## 截图
 
-| SSiD 标题栏（壳） | web 悬浮球 | 聚合面板 |
-|---|---|---|
-| ![SSiD 标题栏](docs/shots/ssid-titlebar.png) | ![web 悬浮球](docs/shots/web-float.png) | ![聚合面板](docs/shots/web-panel.png) |
+| 聚合面板（内置 + LLM 注册按钮 + ➕） | 右键滑动删除（注销制） |
+|---|---|
+| ![聚合面板](docs/shots/panel-aggregated.png) | ![滑动删除](docs/shots/panel-slide-delete.png) |
 
-> 截图环境：SSiD 0.1.15 壳（标题栏）与 DSH master web（悬浮球/面板）；聚合面板为 web 右下角悬浮球 morph 展开态。
+| 二次点击关闭（引擎探测语义） | ➕ LLM 注册会话（反问 → 探查 → 注册） |
+|---|---|
+| ![二次点击关闭](docs/shots/second-click-open.png) | ![LLM 注册会话](docs/shots/llm-register-session.png) |
+
+| SSiD 标题栏（壳） | web 悬浮球 |
+|---|---|
+| ![SSiD 标题栏](docs/shots/ssid-titlebar.png) | ![web 悬浮球](docs/shots/web-float.png) |
+
+> 截图环境：SSiD 壳（标题栏/聚合面板）与 DSH web（悬浮球）；Remote 为用户 LLM 现场注册的按钮（ds-harness-remote 入口），演示「统一入口聚合散落按钮」。
 
 ## 安装
 
