@@ -584,11 +584,12 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         row.appendChild(slide)
         panel.insertBefore(row, addBtn)
         btn.setAttribute('data-user-adapter', '1')
-        btn.addEventListener('contextmenu', function (e: MouseEvent) {
+        // 右键提升到行容器：按钮/删除块/行内任意位置右键均 toggle（含删除块上）
+        row.addEventListener('contextmenu', function (e: MouseEvent) {
           e.preventDefault()
           e.stopPropagation()
           if (row.classList.contains('ssid-tb-row-open')) {
-            // 再右键 = 收回（toggle）
+            // 再右键（含删除块上） = 收回
             row.classList.remove('ssid-tb-row-open')
             return
           }
