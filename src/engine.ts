@@ -32,21 +32,23 @@ function cssEscape(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`)
 }
 
-/** 按内置定义执行一条适配器（防御执行：定位失败/禁用 → false，绝不误伤） */
+/** 按内置定义执行一条适配器（防御执行：定位失败/禁用 → false，绝不误伤）
+ *  「换位置」缺省：act 未填 → click（点击原按钮）。 */
 export function runAdapter(adapter: AdapterDef, env: ActEnv): boolean {
-  switch (adapter.act.kind) {
+  const act = adapter.act ?? { kind: 'click' as const }
+  switch (act.kind) {
     case 'click': {
       const target = env.find(adapter.button)
       return actClick(target as Clickable | null)
     }
     case 'dispatch-event':
-      return env.dispatch(adapter.act.event, adapter.act.detail)
+      return env.dispatch(act.event, act.detail)
     case 'toggle-panel': {
       // 面板定位（默认取本插件按钮所在的面板容器；close 目标按选择器探测）
       const panel = env.findPanel(`#${cssEscape(adapter.id)}-panel`)
       if (panel !== null) {
-        const closeEl = adapter.act.close !== undefined
-          ? (env.find(adapter.act.close) as Clickable | null)
+        const closeEl = act.close !== undefined
+          ? (env.find(act.close) as Clickable | null)
           : null
         return actTogglePanel(panel, closeEl)
       }
@@ -56,8 +58,8 @@ export function runAdapter(adapter: AdapterDef, env: ActEnv): boolean {
     case 'open-settings': {
       // v2 调研点①：DSH 无公开 window 钩子——footer trigger 文本语义优先 + 锚点链兜底。
       // adapter.button 用于自绘按钮展示定位；面板打开走行为库定位点击（按钮自身 toggle）。
-      if (adapter.act.path !== undefined) {
-        console.warn(`quick-toolbar: open-settings path '${adapter.act.path}' 暂不支持（v2 深链待入）`)
+      if (act.path !== undefined) {
+        console.warn(`quick-toolbar: open-settings path '${act.path}' 暂不支持（v2 深链待入）`)
       }
       return actOpenSettings({
         find: env.find,
@@ -69,7 +71,7 @@ export function runAdapter(adapter: AdapterDef, env: ActEnv): boolean {
         console.warn('quick-toolbar: command 环境无 runCommand 通道（旧版 DSH/未注入）')
         return false
       }
-      return actCommand({ execute: env.runCommand }, adapter.act.name)
+      return actCommand({ execute: env.runCommand }, act.name)
     }
   }
 }

@@ -52,6 +52,16 @@ test('runAdapter: toggle-panel 面板缺失 → 静默（不假装成功）', ()
   assert.ok(env.calls.some((c) => c.startsWith('findPanel:')))
 })
 
+test('runAdapter: 缺省 act → click（换位置缺省语义）', () => {
+  const env = makeEnv({
+    find: (sel) => (sel === '.plain-btn' ? ({ click: () => {}, disabled: false } as unknown as HTMLElement) : null),
+  })
+  // 内置适配器（带 act）展开后复制——构造无 act 的最小适配
+  const adapter = builtinAdapter('dsh-plugin-center')!
+  const minimal = { ...adapter, button: '.plain-btn', act: undefined }
+  assert.equal(runAdapter(minimal, env), true)
+})
+
 test('runAdapter: command 无 runCommand 通道 → 警告 + false，不吞不假装', () => {
   const env = makeEnv()
   const warn = console.warn

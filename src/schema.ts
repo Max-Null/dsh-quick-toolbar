@@ -10,10 +10,13 @@ import { z } from 'zod'
 export const adapterSchema = z.object({
   id: z.string().min(1),
   button: z.string().min(1),
+  // 「换位置」最小注册（2026-08-30 用户洞察）：仅 id+button 即可——图标/文字/
+  // 点击事件全部缺省推导（from-button 扣取原按钮视觉 / 扣原按钮文字 / click）；
+  // 自定义按钮才需要显式 icon/label/act。
   icon: z.discriminatedUnion('source', [
     z.object({ source: z.literal('from-button') }),
     z.object({ source: z.literal('custom'), value: z.string().min(1) }),
-  ]),
+  ]).optional(),
   label: z.string().optional(),
   act: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('click') }),
@@ -21,7 +24,7 @@ export const adapterSchema = z.object({
     z.object({ kind: z.literal('dispatch-event'), event: z.string(), detail: z.string().optional() }),
     z.object({ kind: z.literal('open-settings'), path: z.string().optional() }),
     z.object({ kind: z.literal('command'), name: z.string() }),
-  ]),
+  ]).optional(),
   hide: z.boolean().optional(),
   enabled: z.boolean().optional(),
 })

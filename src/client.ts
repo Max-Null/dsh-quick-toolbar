@@ -416,13 +416,37 @@ import { runAdapter, type ActEnv } from './engine.ts'
         'dsh-better-sidebar.bottom': 'bottom',
         'dsh-session-manager': 'sessions',
       }
+      // 「换位置」渲染（2026-08-30 用户洞察）：聚合 = 把按钮换到工具栏——
+      // from-button 扣取原按钮的图标（svg/img/背景图）与文字；缺省 act = click。
       var adapterIconHtml = function (adapter: AdapterDef, kind: string | null) {
-        if (adapter.icon.source === 'custom') {
+        if (adapter.icon !== undefined && adapter.icon.source === 'custom') {
           var value = adapter.icon.value
           if (value.indexOf('<') === 0) return value
           return toolbarIcon(value)
         }
+        // from-button（缺省也是它）：扣取原按钮视觉（svg → img → 背景图）
+        try {
+          var el = document.querySelector(adapter.button) as HTMLElement | null
+          if (el !== null) {
+            var svg = el.querySelector('svg')
+            if (svg !== null) return svg.outerHTML
+            var img = el.querySelector('img')
+            if (img !== null) return img.outerHTML
+            var bg = getComputedStyle(el).backgroundImage
+            if (bg !== null && bg !== 'none') {
+              return '<span style="display:inline-block;width:15px;height:15px;background:' + bg + ';background-size:contain;background-repeat:no-repeat"></span>'
+            }
+          }
+        } catch (_e) {}
         return kind !== null ? toolbarIcon(kind) : toolbarIcon('grid')
+      }
+      var adapterLabel = function (adapter: AdapterDef) {
+        if (adapter.label !== undefined && adapter.label !== '') return adapter.label
+        try {
+          var el = document.querySelector(adapter.button)
+          if (el !== null && (el.textContent || '').trim() !== '') return (el.textContent || '').trim().slice(0, 12)
+        } catch (_e) {}
+        return adapter.id
       }
       var renderButton = function (adapter: AdapterDef, kind: string | null) {
         var b = document.createElement('button')
@@ -437,7 +461,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
           trackLocale(b, 'tb.' + kind, 'aria')
           trackLocale(b, 'tb.' + kind, 'title')
         } else {
-          var label = adapter.label !== undefined ? adapter.label : adapter.id
+          var label = adapterLabel(adapter)
           var textSpan = b.querySelector('span') as HTMLElement
           if (textSpan !== null) textSpan.textContent = label
           b.setAttribute('aria-label', label)

@@ -18,18 +18,19 @@ export type ActDef =
 /** 图标来源：from-button（扣原按钮）/ custom（emoji 或 svg data-uri） */
 export type IconDef = { source: 'from-button' } | { source: 'custom'; value: string }
 
-/** 一条适配器（zod 校验对象；用户配置同构） */
+/** 一条适配器（zod 校验对象；用户配置同构）
+ *  最小注册（「换位置」）：仅 id+button——图标/文字/点击缺省推导。 */
 export interface AdapterDef {
   /** 插件标识（去重/开关） */
   id: string
   /** 分散按钮定位（CSS 选择器） */
   button: string
-  /** 图标/文案来源 */
-  icon: IconDef
+  /** 图标来源（缺省 from-button——扣取原按钮视觉） */
+  icon?: IconDef
   /** 工具栏显示名（缺省扣原按钮文案） */
   label?: string
-  /** 点击行为（枚举 + 参数） */
-  act: ActDef
+  /** 点击行为（缺省 click——点击原按钮） */
+  act?: ActDef
   /** 点击后隐藏原按钮（默认 true） */
   hide?: boolean
   /** 用户可单独关闭（默认 true） */

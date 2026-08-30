@@ -47,3 +47,14 @@ test('parseUserAdapters: 空配置（无 adapters 键）→ 拒绝（结构明�
   const r = parseUserAdapters('{}')
   assert.equal(r.ok, false)
 })
+
+test('parseUserAdapters: 「换位置」最小注册（仅 id+button）通过——图标/文字/点击缺省推导', () => {
+  const r = parseUserAdapters(JSON.stringify({ adapters: [{ id: 'minimal', button: '.min-btn' }] }))
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    const a = r.value.adapters[0]!
+    assert.equal(a.id, 'minimal')
+    assert.equal(a.icon, undefined)
+    assert.equal(a.act, undefined)
+  }
+})
