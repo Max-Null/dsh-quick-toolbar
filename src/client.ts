@@ -648,7 +648,9 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         // 首选：创建「添加按钮」会话并注入任务书（自动执行——LLM 收到即反问）。
         // 降级：注入 composer 草稿（用户 Enter 发送；同样完整，仅少了新会话隔离）。
         void ensureRegisterSession().then(function (ok) {
-          if (!ok) injectComposerDraft(registerBriefWithSessionUrl())
+          if (!ok) {
+            registerBriefWithSessionUrl().then(function (brief) { injectComposerDraft(brief) })
+          }
         })
       })
       panel.appendChild(addBtn)
@@ -885,14 +887,23 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     var uiWorkspaceSvc: {
       connectWorkspace?: (workspaceId: string) => Promise<string>
     } | null = null
-    // 探查通道前缀：把当前 DSH 页面完整 URL（含认证 token）附给任务书——
-    // LLM 浏览器 navigate 即可直达用户环境（实测「添加按钮1」：裸访问内核端口
-    // 401，无 token 时 LLM 陷入认证迷宫，探测闭环无法执行——2026-08-30）。
-    // token 仅随会话 prompt 注入（会话内使用），不入任何持久记录。
-    function registerBriefWithSessionUrl(): string {
-      var url = ''
-      try { url = window.location.href } catch (_e) {}
-      return '## 探查通道（已为你的浏览器认证好）：\n- 用浏览器打开下面这个 URL，即可直接访问当前 DSH 页面（含认证 token，仅本会话使用，勿写入文件/回复）:\n' + url + '\n\n' + REGISTER_BRIEF
+    // 探查通道（v0.7.7）：host 半经 connection.authenticatedUrl 拼带 token 完整
+    // URL（client 拿不到 token——browser-auth 的 cookie 是 HttpOnly，client
+    // connection 面无 authenticatedUrl）；LLM 浏览器 navigate 首访换 cookie、
+    // 303 重定向回干净根路径，之后以 cookie 认证畅通。失败兜底 = 无通道段
+    //（任务书已说明"无附带 URL 时向用户要页面地址"）。
+    function buildRegisterBrief(url: string): string {
+      return '## 探查通道（已为你的浏览器认证好）：\n- 用浏览器打开下面这个 URL 即可直达当前 DSH 页面（首次访问会换 cookie 并自动重定向到干净根路径；token 仅本会话使用，勿写入文件/回复）:\n' + url + '\n\n' + REGISTER_BRIEF
+    }
+    function registerBriefWithSessionUrl(): Promise<string> {
+      return fetch('/quick-toolbar/api/auth-url')
+        .then(function (r) { return r.json() })
+        .then(function (d) {
+          var ok = d !== null && typeof d === 'object' && (d as { ok?: unknown }).ok === true
+          var url = ok && typeof (d as { url?: unknown }).url === 'string' ? (d as { url: string }).url : ''
+          return buildRegisterBrief(url)
+        })
+        .catch(function () { return buildRegisterBrief('') })
     }
     // ➕ 注册入口：创建「添加按钮」会话并注入任务书（queue 执行）。
     // 同款机制 = 插件中心 LLM 更新（ensureLlmUpdateSession）；任何一步不可用
@@ -917,8 +928,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           var face = typeof svc3.binding === 'function' ? svc3.binding(sid) : undefined
           var s = face !== undefined && face !== null && face.session !== undefined && face.session !== null ? face.session : undefined
           if (s === undefined || s === null || typeof s.prompt !== 'function') return false
-          return s.prompt([{ type: 'text', text: registerBriefWithSessionUrl() }], 'queue')
-            .then(function (res) {
+          return registerBriefWithSessionUrl().then(function (brief) {
+            // 惰性回调：窄化不保留，重新收窄
+            var sess2 = s
+            if (sess2 === undefined || sess2 === null || typeof sess2.prompt !== 'function') {
+              return Promise.resolve({ ok: false } as { ok?: boolean })
+            }
+            return sess2.prompt([{ type: 'text', text: brief }], 'queue')
+          }).then(function (res) {
               if (res === undefined || res === null || res.ok !== true) return false
               // 回调是惰性执行的独立流场：外层窄化不保留，这里重新收窄；
               // 重命名非关键（对话框 title 而已）——失败不降级

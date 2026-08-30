@@ -151,10 +151,47 @@ const stateRouteDefinition = {
   },
 }
 
+// ── 探查通道（v0.7.7）：DSH web 认证 = 根 URL 一次性 token（首访 → mint cookie →
+//    303 重定向回干净 /，之后 cookie 认证）。client 半拿不到 token（browser-auth
+//    HttpOnly+SameSite=Strict；client connection 面无 authenticatedUrl——只有 host
+//    面有）。因此 host 半经 connection.authenticatedUrl 拼带 token URL 供 LLM 浏览器
+//    直达（「添加按钮1」实测：裸访内核端口 401 → LLM 卡在找 token，探测闭环无法执行）。
+//    仅本地 loopback 页面可调用；token 只随任务书注入 LLM 会话。
+let wsSvc: {
+  webServer: { register: (d: unknown) => void; host: string; port: number }
+  connection: { authenticatedUrl: (baseUrl: string) => string }
+} | null = null
+
+const authUrlRouteDefinition = {
+  kind: 'exact',
+  path: '/quick-toolbar/api/auth-url',
+  handler: async (
+    _req: { method?: string },
+    res: { writeHead: (n: number, h: Record<string, string>) => void; end: (s: string) => void },
+  ): Promise<void> => {
+    const w = wsSvc
+    if (w === null || w === undefined) {
+      sendJson(res, 200, { ok: false, error: 'auth-url-unavailable' })
+      return
+    }
+    try {
+      const url = w.connection.authenticatedUrl('http://' + w.webServer.host + ':' + String(w.webServer.port) + '/')
+      sendJson(res, 200, { ok: true, url })
+    } catch {
+      sendJson(res, 200, { ok: false, error: 'auth-url-unavailable' })
+    }
+  },
+}
+
 function apply(ctx: { inject: (deps: string[], fn: (c: never) => void) => void }): void {
-  ctx.inject(['webServer'] as never, ((wsCtx: { webServer: { register: (d: unknown) => void } }) => {
+  ctx.inject(['webServer', 'connection'] as never, ((wsCtx: {
+    webServer: { register: (d: unknown) => void; host: string; port: number }
+    connection: { authenticatedUrl: (baseUrl: string) => string }
+  }) => {
+    wsSvc = wsCtx
     wsCtx.webServer.register(adaptersRouteDefinition)
     wsCtx.webServer.register(stateRouteDefinition)
+    wsCtx.webServer.register(authUrlRouteDefinition)
   }) as never)
 }
 
