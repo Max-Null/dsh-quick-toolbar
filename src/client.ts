@@ -400,6 +400,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 用户可从标题栏「悬浮球」按钮开启（状态 host 化——手册 §7.10）。
       if (win.__SSID_SHELL__ === true && !qtState.shellVisible) return
       if (document.getElementById(TOOLBAR_ID) !== null) return
+      // ➕ 注册入口按钮引用：**初始化必须在 renderButton 定义前**（var 提升
+      // 期变量为 undefined，内置按钮同步渲染时 undefined.parentNode 抛
+      // TypeError——2026-08-30 SSiD 实测 client.js:692 抓到的运行时炸点）。
+      var addBtn: HTMLButtonElement | null = null
       var root = document.createElement('div')
       root.id = TOOLBAR_ID
       var panel = document.createElement('div')
@@ -482,8 +486,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           if (kind !== null) { toolbarAction(kind); return }
           runAdapter(adapter, toolbarEnv())
         })
-        // 用户适配器（异步渲染）插到 ➕ 之前；内置（同步，addBtn 未入面板）→ 面板尾
-        if (addBtn.parentNode === panel) {
+        // 用户适配器（异步渲染）插到 ➕ 之前；内置（同步，addBtn 未入面板）→ 面板尾。
+        // 注意：addBtn 声明在下方（var 提升为 undefined）——必须先判 null，
+        // 否则内置按钮同步渲染时 undefined.parentNode 抛 TypeError（实测于 SSiD 0.5.1）。
+        if (addBtn !== null && addBtn.parentNode === panel) {
           panel.insertBefore(b, addBtn)
         } else {
           panel.appendChild(b)
@@ -526,7 +532,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // （sessions/workspaces/uiWorkspace 服务经 exports.inject 声明注入——
       // cordis-client-runner 白名单门控，插件中心 LLM 更新同款机制）；
       // 服务缺失/失败 → 降级 composer 草稿注入。载体自身功能，不走适配器管线。
-      var addBtn = document.createElement('button')
+      addBtn = document.createElement('button')
       addBtn.type = 'button'
       addBtn.className = 'ssid-tb-add'
       addBtn.setAttribute('aria-label', '添加/迁移按钮')
