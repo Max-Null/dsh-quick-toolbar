@@ -5,6 +5,8 @@
 > 的一个子插件条目）。
 > 输出：一段 JSON（写入 `~/.dsh/quick-toolbar-adapters.json`，`{ "adapters": [...] }`）。
 > golden 示例：内置适配器集（本仓库 `src/adapters.ts`）——**先看示例再写**。
+> 注：用户点击工具栏「➕」时注入的浓缩任务书见 `src/register-brief.ts`（先反问、
+> 再探查、后注册）——两份文档语义一致，含任何歧义以本文件为准。
 
 ## 你的职责（重要的是前两步）
 

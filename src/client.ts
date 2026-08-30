@@ -34,6 +34,7 @@
 
 import { BUILTIN_ADAPTERS, builtinAdapter, type AdapterDef } from './adapters.ts'
 import { runAdapter, type ActEnv } from './engine.ts'
+import { REGISTER_BRIEF } from './register-brief.ts'
 
 (window as unknown as { __ModuleLoader__: { load: (definition: unknown) => unknown } }).__ModuleLoader__.load({
   id: '@max-null/dsh-quick-toolbar',
@@ -133,6 +134,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
       'tb.sidebar': ['侧栏', 'Sidebar'],
       'tb.bottom': ['底栏', 'Bottom panel'],
       'tb.sessions': ['会话管理', 'Sessions'],
+      'tb.add': ['添加按钮', 'Add button'],
+      'tb.addAria': ['添加/迁移按钮（让 LLM 来注册）', 'Add / migrate a button (let the LLM register it)'],
       'sm.open': ['会话管理', 'Sessions'],
       'sm.openTitle': ['打开会话管理面板', 'Open session manager'],
     }
@@ -294,6 +297,11 @@ import { runAdapter, type ActEnv } from './engine.ts'
       '#ssid-toolbar .ssid-tb-btn{border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left}',
       '#ssid-toolbar .ssid-tb-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-btn svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
+      // ➕ 注册入口（v0.5）：载体功能（非聚合按钮）——虚线边框区分「被聚合的按钮」；
+      // 点击注入注册任务书草稿到 composer，由环境 LLM 完成探查+注册（V2-9 载体哲学）。
+      '#ssid-toolbar .ssid-tb-add{border:1px dashed var(--dsw-alias-border-strong,rgba(128,148,168,.45));background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left;margin-top:2px;transition:color .15s,border-color .15s,background .15s}',
+      '#ssid-toolbar .ssid-tb-add:hover{color:var(--dsw-alias-label-primary,#d8e0ea);border-color:var(--dsw-alias-label-secondary,#98a2b3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
+      '#ssid-toolbar .ssid-tb-add svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -307,6 +315,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
         menu: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M3 8h10M3 11h10" stroke-linecap="round"/></svg>',
         pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 2.2l4 4-2.6 1.4-1.8 1.8.4 2.6-1.4 1.4-2.6-3L3.9 13l-1-1 3-3.9-3-2.6 1.4-1.4 2.6.4 1.8-1.8z"/></svg>',
         settings: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/></svg>',
+        add: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>',
       }
       return ICONS[name] || ICONS.grid
     }
@@ -342,15 +351,14 @@ import { runAdapter, type ActEnv } from './engine.ts'
     // 需完整 client ctx，而 V0 协议 apply 收到的 ctx 仅 {fiber}——execute 不可达。
     // 设计修正：command = composer 草稿注入（不自动提交——用户确认后发送，
     // 避免误发；与 V2-2「建议制」一致）。设计文档 A2 已同步。
-    // composer 草稿注入：写入 `/name` + InputEvent + focus（**不自动提交**——
-    // 用户确认后发送，避免误发命令；定位失败 → false 静默防御）。
-    function typeCommandIntoComposer(name: string) {
+    // composer 草稿注入：写入 text + InputEvent + focus（**不自动提交**——
+    // 用户确认后发送；定位失败 → false 静默防御）。
+    function injectComposerDraft(text: string) {
       var seat = document.querySelector('[data-composer-seat]')
       var el = (seat !== null && seat !== undefined
         ? seat.querySelector('textarea, [contenteditable="true"]')
         : document.querySelector('textarea, [contenteditable="true"]')) as HTMLElement | null
       if (el === null || el === undefined) return false
-      var text = '/' + name
       if (el instanceof HTMLTextAreaElement) {
         var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
         if (setter !== undefined && setter.set !== undefined) setter.set.call(el, text)
@@ -363,6 +371,9 @@ import { runAdapter, type ActEnv } from './engine.ts'
       el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
       el.focus()
       return true
+    }
+    function typeCommandIntoComposer(name: string) {
+      return injectComposerDraft('/' + name)
     }
 
     function toolbarAction(kind: string) {
@@ -471,7 +482,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
           if (kind !== null) { toolbarAction(kind); return }
           runAdapter(adapter, toolbarEnv())
         })
-        panel.appendChild(b)
+        // 用户适配器（异步渲染）插到 ➕ 之前；内置（同步，addBtn 未入面板）→ 面板尾
+        if (addBtn.parentNode === panel) {
+          panel.insertBefore(b, addBtn)
+        } else {
+          panel.appendChild(b)
+        }
       }
       for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
         var adapter = BUILTIN_ADAPTERS[ai]
@@ -506,6 +522,25 @@ import { runAdapter, type ActEnv } from './engine.ts'
           })
           .catch(function () {})
       }
+      // ➕ 注册入口（v0.5）：点击 → 注册任务书注入 composer 草稿（不自动提交，
+      // 用户按 Enter 发给环境 LLM——LLM 按任务书先反问、后探查、再注册）。
+      // 载体自身功能，不走适配器管线；DSH 无「创建新会话」通道（V0 ctx={fiber}），
+      // 故任务书落在当前会话——README 教程已说明。
+      var addBtn = document.createElement('button')
+      addBtn.type = 'button'
+      addBtn.className = 'ssid-tb-add'
+      addBtn.setAttribute('aria-label', '添加/迁移按钮')
+      addBtn.title = '添加按钮'
+      addBtn.innerHTML = toolbarIcon('add') + '<span></span>'
+      trackLocale(addBtn, 'tb.addAria', 'aria')
+      trackLocale(addBtn, 'tb.add', 'title')
+      var addSpan = addBtn.querySelector('span') as HTMLElement
+      if (addSpan !== null) addSpan.textContent = '添加按钮'
+      trackLocale(addBtn, 'tb.add', 'text-span')
+      addBtn.addEventListener('click', function () {
+        injectComposerDraft(REGISTER_BRIEF)
+      })
+      panel.appendChild(addBtn)
       var ball = document.createElement('button')
       ball.type = 'button'
       ball.id = TOOLBAR_ID + '-ball'
