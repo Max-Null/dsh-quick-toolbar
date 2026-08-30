@@ -522,10 +522,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           })
           .catch(function () {})
       }
-      // ➕ 注册入口（v0.5）：点击 → 注册任务书注入 composer 草稿（不自动提交，
-      // 用户按 Enter 发给环境 LLM——LLM 按任务书先反问、后探查、再注册）。
-      // 载体自身功能，不走适配器管线；DSH 无「创建新会话」通道（V0 ctx={fiber}），
-      // 故任务书落在当前会话——README 教程已说明。
+      // ➕ 注册入口（v0.5.1）：点击 → 创建「添加按钮」会话并注入注册任务书
+      // （sessions/workspaces/uiWorkspace 服务经 exports.inject 声明注入——
+      // cordis-client-runner 白名单门控，插件中心 LLM 更新同款机制）；
+      // 服务缺失/失败 → 降级 composer 草稿注入。载体自身功能，不走适配器管线。
       var addBtn = document.createElement('button')
       addBtn.type = 'button'
       addBtn.className = 'ssid-tb-add'
@@ -538,7 +538,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       if (addSpan !== null) addSpan.textContent = '添加按钮'
       trackLocale(addBtn, 'tb.add', 'text-span')
       addBtn.addEventListener('click', function () {
-        injectComposerDraft(REGISTER_BRIEF)
+        // 首选：创建「添加按钮」会话并注入任务书（自动执行——LLM 收到即反问）。
+        // 降级：注入 composer 草稿（用户 Enter 发送；同样完整，仅少了新会话隔离）。
+        void ensureRegisterSession().then(function (ok) {
+          if (!ok) injectComposerDraft(REGISTER_BRIEF)
+        })
       })
       panel.appendChild(addBtn)
       var ball = document.createElement('button')
@@ -756,7 +760,63 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       })
     }
 
-    exports.inject = []
+    exports.inject = ['sessions', 'workspaces', 'uiWorkspace']
+
+    // 会话/工作区服务引用（apply 时按 inject 声明注入；字段与插件中心
+    // LlmSessionsSvc/LlmWorkspacesSvc/LlmUiWorkspaceSvc 结构对齐，只声明用到的）。
+    var sessionsSvc: {
+      list?: { getSnapshot?: () => { byId?: Record<string, { id?: string, title?: string, displayTitle?: string, running?: boolean }> } }
+      open?: (id: string) => void
+      binding?: (id: string) => { session?: {
+        prompt?: (content: Array<{ type: 'text', text: string }>, mode: 'queue' | 'steer') => Promise<{ ok?: boolean, error?: { message?: string } }>
+        rename?: (title: string) => Promise<unknown>
+      } } | undefined
+    } | null = null
+    var workspacesSvc: {
+      list?: { getSnapshot?: () => { items?: Array<{ workspaceId?: string }> } }
+    } | null = null
+    var uiWorkspaceSvc: {
+      connectWorkspace?: (workspaceId: string) => Promise<string>
+    } | null = null
+    // ➕ 注册入口：创建「添加按钮」会话并注入任务书（queue 执行）。
+    // 同款机制 = 插件中心 LLM 更新（ensureLlmUpdateSession）；任何一步不可用
+    // → 返回 false（调用方降级 composer 草稿注入，按钮永不失能）。
+    function ensureRegisterSession(): Promise<boolean> {
+      var svc = sessionsSvc
+      var wsvc = workspacesSvc
+      var uws = uiWorkspaceSvc
+      if (svc === null || wsvc === null || uws === null) return Promise.resolve(false)
+      if (typeof uws.connectWorkspace !== 'function') return Promise.resolve(false)
+      var snapshot = (wsvc.list !== undefined && typeof wsvc.list.getSnapshot === 'function') ? wsvc.list.getSnapshot() : undefined
+      var items = snapshot !== undefined && snapshot !== null && snapshot.items !== undefined && snapshot.items !== null ? snapshot.items : []
+      // 会话落点 = 最近工作区（items[0]；快照无 recentWorkspaceId——插件中心
+      // 同款兜底）；专用工作区分组（create+rename）对「添加按钮」非必要。
+      var wsId = items.length > 0 ? items[0].workspaceId : undefined
+      if (wsId === undefined || wsId === '') return Promise.resolve(false)
+      return uws.connectWorkspace(wsId)
+        .then(function (sid) {
+          if (typeof sid !== 'string' || sid === '') return false
+          var svc3 = svc
+          if (svc3 === null || svc3 === undefined) return false
+          var face = typeof svc3.binding === 'function' ? svc3.binding(sid) : undefined
+          var s = face !== undefined && face !== null && face.session !== undefined && face.session !== null ? face.session : undefined
+          if (s === undefined || s === null || typeof s.prompt !== 'function') return false
+          return s.prompt([{ type: 'text', text: REGISTER_BRIEF }], 'queue')
+            .then(function (res) {
+              if (res === undefined || res === null || res.ok !== true) return false
+              // 回调是惰性执行的独立流场：外层窄化不保留，这里重新收窄；
+              // 重命名非关键（对话框 title 而已）——失败不降级
+              var sess = s
+              var svc2 = svc
+              if (sess === undefined || sess === null) return false
+              if (svc2 === null || svc2 === undefined) return false
+              if (typeof sess.rename === 'function') { void sess.rename('添加按钮').catch(function () {}) }
+              if (typeof svc2.open === 'function') svc2.open(sid)
+              return true
+            })
+        })
+        .catch(function () { return false })
+    }
 
     exports.apply = function (ctx: unknown) {
       // 防重守卫：DSH 插件热重载/重复加载时避免重复注册 ssid:titlebar
@@ -765,6 +825,20 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 「事件传递导致的问题」的排查项之一。
       if (win.__dshQuickToolbarInstalled === true) return
       win.__dshQuickToolbarInstalled = true
+
+      // 会话/工作区服务（exports.inject 声明——cordis-client-runner 按 fiber
+      // inject 白名单注入 ctx；服务缺失时为 undefined，走 ➕ 的 composer 降级。
+      // 实证修正（2026-08-30）：早期 inject=[] 导致 apply 只见 {fiber}——并非
+      // 「无创建会话通道」，而是未声明（插件中心 LLM 更新同款机制，见其
+      // client/index.tsx ensureLlmUpdateSession）。
+      var svcCtx = (ctx !== null && typeof ctx === 'object' ? ctx : {}) as {
+        sessions?: Record<string, unknown>
+        workspaces?: Record<string, unknown>
+        uiWorkspace?: Record<string, unknown>
+      }
+      sessionsSvc = svcCtx.sessions ?? null
+      workspacesSvc = svcCtx.workspaces ?? null
+      uiWorkspaceSvc = svcCtx.uiWorkspace ?? null
 
       var style = document.createElement('style')
       style.setAttribute('data-dsh-quick-toolbar', '')

@@ -1,9 +1,12 @@
 /**
- * 注册任务书（v0.5）——「➕ 按钮」注入 composer 的草稿文本。
+ * 注册任务书（v0.5.1）——「➕ 按钮」注入的 prompt 文本。
  *
  * 设计（V2-9 载体哲学 + 安装教程闭环）：
- * 用户点击工具栏「➕」→ 本任务书注入 composer（不自动提交）→ 用户按 Enter
- * 发送给环境 LLM → LLM 按任务书**先反问、后探查、再注册**。
+ * 用户点击工具栏「➕」→ 首选经 sessions/workspaces/uiWorkspace 服务创建
+ * 「添加按钮」会话并把本任务书以 queue 模式注入（自动执行）——同款机制 =
+ * 插件中心 LLM 更新（ensureLlmUpdateSession，2026-08-30 实证修正：早期
+ * inject=[] 令 apply 只见 {fiber}，「无会话通道」判断是错结论）；
+ * 服务缺失/失败 → 降级为当前 composer 草稿注入（用户 Enter 发送）。
  * 任务书必须自包含（环境 LLM 不一定能访问本仓库文件）——协议要点全部内嵌。
  *
  * 同步纪律：字段与 src/adapters.ts / src/schema.ts 保持一致；

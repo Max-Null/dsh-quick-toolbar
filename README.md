@@ -41,8 +41,7 @@ dsh plugin --profile web add @max-null/dsh-quick-toolbar
 
 **推荐路径（三步，约 1 分钟）：**
 
-1. **点击工具栏面板里的 ➕「添加按钮」**——注册任务书会自动注入到输入框草稿中
-   （不自动发送，按 Enter 才会发出；也可直接复制 `adapters.prompt.md` 到任意会话）。
+1. **点击工具栏面板里的 ➕「添加按钮」**——插件创建「添加按钮」会话并把注册任务书注入其中（自动执行，无需你打字；服务不可用时退化为输入框草稿，按 Enter 发送）。若环境支持复制，也可直接复制 `adapters.prompt.md` 到任意会话。
 2. **回答 LLM 的反问**——它会先问清楚目标：*迁移*（哪个按钮？在哪个面板/插件里？）
    还是*新增*（图标/文字/点击后发生什么？）。回答后 LLM 才会动手——它不会猜。
 3. **LLM 自主探查并注册**——它用自己的浏览器/代码能力找到目标、验证选择器，
@@ -56,7 +55,7 @@ dsh plugin --profile web add @max-null/dsh-quick-toolbar
 **说明**：注册结果是**纯数据**（图标/文字/点击由载体派生或按声明执行），不是代码——
 LLM 注册完就无需在场；那份 JSON 可导出、可备份、可随环境迁移。
 
-> **English quick start** — *Moving a button in is NOT a settings task: open a session and let the on-site LLM do it.* Click the **➕ "Add button"** in the toolbar panel; a registration brief is injected into your composer (press Enter to send). The LLM will first ask you which button to migrate / what new button you want, then it explores the environment, verifies the selector, writes `{ "adapters": [...] }` to `~/.dsh/quick-toolbar-adapters.json`, and you refresh the page. Registration results are plain data — the carrier derives icon/text/click from the original button, and the LLM is no longer needed afterwards.
+> **English quick start** — *Moving a button in is NOT a settings task: open a session and let the on-site LLM do it.* Click the **➕ "Add button"** in the toolbar panel; the plugin creates an "Add button" session and injects the registration brief into it (auto-runs; falls back to a composer draft if the session service is unavailable). The LLM will first ask you which button to migrate / what new button you want, then it explores the environment, verifies the selector, writes `{ "adapters": [...] }` to `~/.dsh/quick-toolbar-adapters.json`, and you refresh the page. Registration results are plain data — the carrier derives icon/text/click from the original button, and the LLM is no longer needed afterwards.
 
 ## 架构
 
