@@ -48,10 +48,12 @@ export const REGISTER_BRIEF = `# 任务：为「工具栏插件」迁移 / 新�
 
 - 图标 = 扣取原按钮视觉（svg/img/背景）；文字 = 扣取原按钮文案；
   点击 = 点击原按钮（act 缺省 \`click\`）。
+- **原按钮自动隐藏**（换位置 = 双入口无意义；缺省隐藏，显式 \`"hide": false\` 才保留——
+  若原按钮被隐藏后其弹窗定位错位，改用 \`hide: false\`）。
 - **自定义按钮**（无原按钮可扣）才需要显式字段：
   \`\`\`json
   { "id": "my-btn", "button": "#app-shell", "icon": { "source": "custom", "value": "emoji 或 svg" },
-    "label": "文字", "act": { "kind": "click" } }
+    "label": "文字", "act": { "kind": "click" }, "hide": false }
   \`\`\`
 
 **行为枚举（只能选这些，禁止写代码）**：
@@ -59,10 +61,21 @@ export const REGISTER_BRIEF = `# 任务：为「工具栏插件」迁移 / 新�
 | kind | 语义 |
 |---|---|
 | \`click\` | 直接点击 |
-| \`toggle-panel\` | 面板开/关（可配 \`close\` 关闭按钮选择器） |
+| \`toggle-panel\` | 面板开/关（**再点关闭**：探测弹窗内关闭按钮写 \`close\` 选择器） |
 | \`dispatch-event\` | 派发 CustomEvent（\`event\`、\`detail?\`） |
 | \`open-settings\` | 打开设置面板（引擎语义锚点定位，再点关闭） |
 | \`command\` | 向输入框注入斜杠命令草稿（\`name\`，不含 \`/\`） |
+
+## 探测闭环（注册前必须完成——别让用户点出"开得关不掉"）
+
+用你的浏览器能力实测原按钮行为，按结果选 act：
+
+1. 点击一次：开的是**弹窗/面板**还是普通页面？
+2. 弹窗/面板能**再点原按钮关闭**吗？**不能** → act 必须用 \`toggle-panel\` 并
+   探测弹窗内的「关闭」按钮（浏览弹窗 DOM，选准且唯一的选择器写 \`close\`）：
+   \`{\"act\": { \"kind\": \"toggle-panel\", \"close\": \".verified-close\" }}\`——
+   「再点关闭」是载体的基本承诺，\`click\` 只适用于天然可再点切换的按钮。
+3. 记录原按钮是否会在意「隐藏」（见第三步 hide 说明）。
 
 ## 第四步：写入配置，让用户刷新
 
@@ -70,6 +83,11 @@ export const REGISTER_BRIEF = `# 任务：为「工具栏插件」迁移 / 新�
 \`~/.dsh/quick-toolbar-adapters.json\`（DSH 环境即 \`$DSH_HOME/quick-toolbar-adapters.json\`；
 重复 \`id\` = 覆盖既有注册）。写入后告知用户**刷新页面**，按钮即出现在工具栏；
 若未出现，修正选择器后重试。协议全文见仓库 \`adapters.prompt.md\`（如可访问请先读一遍）。
+
+## 注册后验证清单（刷新后逐项确认）
+
+① 按钮已出现在工具栏（图标/文字来自原按钮） ② 点击可开启 ③ 再点能关闭
+（toggle-panel 场景） ④ 原按钮已隐藏（或按 hide:false 保留）。任一项不满足 → 修正后重试。
 
 ## 纪律
 

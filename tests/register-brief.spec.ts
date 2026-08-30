@@ -15,6 +15,9 @@ const anchors: [string, string[]][] = [
   ['自定义按钮需显式 icon/label/act', ['custom', 'label', 'act']],
   ['只写数据不写代码（窄接口纪律）', ['只写数据', '非枚举行为']],
   ['探查验证纪律（不得凭猜测写选择器）', ['自己验证', '不要凭猜测']],
+  ['换位置默认隐藏原按钮（hide 语义）', ['原按钮自动隐藏', 'hide: false']],
+  ['探测闭环（再点关闭基本承诺）', ['再点关闭', 'toggle-panel', 'close']],
+  ['注册后验证清单', ['验证清单', '原按钮已隐藏']],
 ]
 
 for (const [name, subs] of anchors) {

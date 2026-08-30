@@ -494,6 +494,15 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         } else {
           panel.appendChild(b)
         }
+        // hide（「换位置」语义，2026-08-30 用户反馈补齐）：缺省隐藏原按钮——
+        // 聚合=换位置，双入口无意义；显式 hide:false 保留。内置项 CSS 已隐藏者
+        // 再设 inline display:none 无害；定位失败静默（候选不存在=无需隐藏）。
+        if (adapter.hide !== false) {
+          try {
+            var origBtn = document.querySelector(adapter.button) as HTMLElement | null
+            if (origBtn !== null) origBtn.style.display = 'none'
+          } catch (_e) {}
+        }
       }
       for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
         var adapter = BUILTIN_ADAPTERS[ai]
