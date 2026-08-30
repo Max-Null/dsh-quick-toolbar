@@ -305,7 +305,9 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 滑动删除行（v0.7.0，iOS 样式）：行容器 overflow 裁剪，按钮左滑露出红色删除块；
       // 背景/文字用 DSH 官方 token（light/dark 双值自适应）
       '.ssid-tb-row{position:relative;overflow:hidden;border-radius:8px}',
-      '.ssid-tb-row .ssid-tb-btn{position:relative;z-index:1;transition:transform .18s ease}',
+      // 按钮铺满行宽（行宽=面板宽）：左移 56 后右端恰好贴红块左缘，无空隙无重叠
+      '.ssid-tb-row .ssid-tb-btn{position:relative;z-index:1;width:100%;box-sizing:border-box;transition:transform .18s ease;background:transparent}',
+      '.ssid-tb-row .ssid-tb-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(128,148,168,.14))}',
       '.ssid-tb-row.ssid-tb-row-open .ssid-tb-btn{transform:translateX(-56px)}',
       '.ssid-tb-del{position:absolute;right:0;top:0;bottom:0;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;border-radius:8px;font-weight:500}',
     ].join('\n')
@@ -581,6 +583,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         btn.addEventListener('contextmenu', function (e: MouseEvent) {
           e.preventDefault()
           e.stopPropagation()
+          if (row.classList.contains('ssid-tb-row-open')) {
+            // 再右键 = 收起（toggle）
+            slideCloseAll()
+            return
+          }
           slideCloseAll()
           row.classList.add('ssid-tb-row-open')
         })
