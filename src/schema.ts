@@ -21,6 +21,7 @@ export const adapterSchema = z.object({
     z.object({ kind: z.literal('dispatch-event'), event: z.string(), detail: z.string().optional() }),
     z.object({ kind: z.literal('open-settings'), path: z.string().optional() }),
     z.object({ kind: z.literal('command'), name: z.string() }),
+    z.object({ kind: z.literal('scan') }),
   ]),
   hide: z.boolean().optional(),
   enabled: z.boolean().optional(),

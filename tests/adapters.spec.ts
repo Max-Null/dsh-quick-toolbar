@@ -10,12 +10,12 @@ function validate(a: AdapterDef): void {
   assert.ok(a.id.length > 0)
   assert.equal(typeof a.button, 'string')
   assert.ok(a.button.length > 0)
-  assert.ok(['click', 'toggle-panel', 'dispatch-event', 'open-settings', 'command'].includes(a.act.kind))
+  assert.ok(['click', 'toggle-panel', 'dispatch-event', 'open-settings', 'command', 'scan'].includes(a.act.kind))
   assert.equal(typeof a.icon.source, 'string')
 }
 
 test('内置适配器集：全部结构化合法', () => {
-  assert.equal(BUILTIN_ADAPTERS.length, 5)
+  assert.equal(BUILTIN_ADAPTERS.length, 6)
   for (const a of BUILTIN_ADAPTERS) validate(a)
 })
 

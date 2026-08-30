@@ -34,9 +34,9 @@
 
 ### A2. command
 
-目标：适配「触发 dsh-commands 文本命令」类按钮。v1 定义 `{ kind: 'command', name: string }`。
+目标：为「收藏常用命令」提供轻入口（**2026-08-30 用户定位确认**：非聚合核心——哲学是收编**按钮**；command 是场景有限的侧翼功能，类似"收藏特定 command 到悬浮球"；保留但不作为宣传重点）。
 
-**最终实现（2026-08-30 实证决策）**：**composer 草稿注入**——写入 `/name` 到 composer（InputEvent + focus），**不自动提交**（用户确认后发送，避免误发；与 V2-2「建议制」一致）。
+**实现（2026-08-30 实证决策）**：**composer 草稿注入**——写入 `/name` 到 composer（InputEvent + focus），**不自动提交**（用户确认后发送，避免误发；与 V2-2「建议制」一致）。
 - **execute 主通道不可达（已实证）**：`ctx.remote.commands.execute(sessionId, line)` 需完整 client ctx（cordis 服务面），而 **V0 协议 apply 收到的 ctx 仅 `{ fiber }`**（2026-08-30 运行时日志实证；无 remote）——主通道在 V0 协议下不可达；迁移 clientBundle 协议（M3 壳拆分范畴）前维持草稿注入。
 - 语义：行为 = 引擎能力（注入草稿），适配器 = 数据（`{ kind: 'command', name }`）——不变。历史记录见 M1-rec（偏差 1 关闭于本决策）。
 

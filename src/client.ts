@@ -33,6 +33,7 @@
  */
 
 import { BUILTIN_ADAPTERS, builtinAdapter, type AdapterDef } from './adapters.ts'
+import { scanCandidates, buildPrompt, type ScoutCandidate } from './scout.ts'
 import { runAdapter, type ActEnv } from './engine.ts'
 
 (window as unknown as { __ModuleLoader__: { load: (definition: unknown) => unknown } }).__ModuleLoader__.load({
@@ -294,6 +295,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
       '#ssid-toolbar .ssid-tb-btn{border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left}',
       '#ssid-toolbar .ssid-tb-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-btn svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
+      '#ssid-toolbar .ssid-tb-note{font-size:10px;line-height:14px;color:var(--dsw-alias-label-tertiary,#7b8494);padding:2px 4px;white-space:nowrap}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -307,6 +309,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
         menu: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M3 8h10M3 11h10" stroke-linecap="round"/></svg>',
         pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 2.2l4 4-2.6 1.4-1.8 1.8.4 2.6-1.4 1.4-2.6-3L3.9 13l-1-1 3-3.9-3-2.6 1.4-1.4 2.6.4 1.8-1.8z"/></svg>',
         settings: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/></svg>',
+        scan: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4"/><path d="M10.2 10.2L13.5 13.5"/></svg>',
       }
       return ICONS[name] || ICONS.grid
     }
@@ -332,7 +335,59 @@ import { runAdapter, type ActEnv } from './engine.ts'
           return null
         },
         runCommand: function (name) { return typeCommandIntoComposer(name) },
+        scan: function () { return doScan() },
+        template: function () {
+          return '{"id":"<插件标识>","button":"<CSS 选择器>","icon":{"source":"from-button|custom"},"label":"…","act":{"kind":"click|toggle-panel|dispatch-event|open-settings"},"hide":true}'
+        },
+        report: function (text) { reportScan(text) },
       }
+    }
+    // ── scout（v2 M2 最小闭环）：扫描未适配按钮 → 提示词（建议制 V2-2）──
+    // 已收编判定 = 内置集 + 用户适配器 button 选择器（querySelectorAll 命中集）
+    var userAdapterButtons: string[] = []
+    function doScan() {
+      var matched = new Set<Element>()
+      var selectors = BUILTIN_ADAPTERS.map(function (a) { return a.button }).concat(userAdapterButtons)
+      for (var si = 0; si < selectors.length; si++) {
+        try {
+          var els = document.querySelectorAll(selectors[si])
+          for (var ei = 0; ei < els.length; ei++) matched.add(els[ei])
+        } catch (_e) {}
+      }
+      return scanCandidates(
+        function () { return Array.prototype.slice.call(document.querySelectorAll('button, [role="button"]')) },
+        function (el) { return matched.has(el as Element) },
+        function (el) {
+          var e = el as HTMLElement
+          var cls = String(e.className || '').split(' ').filter(Boolean)
+            .map(function (c) { return c.replace(/^[A-Za-z0-9_]{5,7}_/, '') })
+            .slice(0, 3).join(' ')
+          var rect = e.getBoundingClientRect()
+          return {
+            tag: e.tagName,
+            ariaLabel: e.getAttribute('aria-label'),
+            title: e.getAttribute('title'),
+            text: (e.textContent || '').trim().slice(0, 40),
+            hint: cls !== '' ? '.' + cls.replace(/ /g, '.') : '',
+            visible: rect.width > 0 && rect.height > 0 && e.offsetParent !== null,
+          }
+        },
+      )
+    }
+    function reportScan(text: string) {
+      try { void navigator.clipboard.writeText(text).catch(function () {}) } catch (_e) {}
+      const panelEl = document.querySelector('#ssid-toolbar .ssid-tb-panel') as HTMLElement | null
+      if (panelEl === null) return
+      var note = panelEl.querySelector('.ssid-tb-note') as HTMLElement | null
+      if (note === null) {
+        note = document.createElement('div')
+        note.className = 'ssid-tb-note'
+        panelEl.appendChild(note)
+      }
+      note.textContent = '扫描完成：提示词已复制（可粘贴给 LLM）'
+      setTimeout(function () {
+        if (note !== null && note.parentNode === panelEl) panelEl.removeChild(note)
+      }, 5000)
     }
     // command 通道（2026-08-30 实证决策）：DSH master `ctx.remote.commands.execute`
     // 需完整 client ctx，而 V0 协议 apply 收到的 ctx 仅 {fiber}——execute 不可达。
@@ -468,6 +523,7 @@ import { runAdapter, type ActEnv } from './engine.ts'
             for (var ui = 0; ui < rows.length; ui++) {
               var user = rows[ui] as AdapterDef | null
               if (user === null || typeof user !== 'object') continue
+              userAdapterButtons.push(user.button)
               var userKind = TOOLBAR_KIND_BY_ADAPTER[user.id]
               try {
                 var old = panel.querySelector('[data-adapter-id="' + user.id.replace(/"/g, '\\"') + '"]')
