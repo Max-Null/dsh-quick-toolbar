@@ -6,8 +6,6 @@
  * DOM 绑定由引擎执行器负责，V2 的「函数式 act」也经
  * 此层白名单扩展。
  */
-import type { ScoutCandidate } from './scout.ts'
-import { buildPrompt } from './scout.ts'
 
 /** 可点击元素最小接口（测试可注入 stub） */
 export interface Clickable {
@@ -141,21 +139,4 @@ export interface CommandEnv {
 export function actCommand(env: CommandEnv, name: string): boolean {
   if (name === undefined || name === null || name.trim() === '') return false
   return env.execute(name.trim())
-}
-
-/** 扫描环境（v2 M2 最小闭环）：scan = 产出未识别候选；template = 适配模板；
- *  report = 呈现完整提示词。建议制（V2-2）：只发现+提示词，不自动写入/触发。 */
-export interface ScanEnv {
-  /** 未识别候选列表（建议制——只发现，不自动启用）。 */
-  scan(): readonly ScoutCandidate[]
-  /** 适配模板（client 提供——adapters.prompt.md 指引/内联 schema）。 */
-  template(): string
-  /** 呈现完整提示词（复制/提示条——环境实现）。 */
-  report(text: string): void
-}
-
-/** 未识别按钮扫描（建议制 V2-2：只发现+提示词，不自动写入/触发）。 */
-export function actScan(env: ScanEnv): boolean {
-  env.report(buildPrompt(env.scan(), env.template()))
-  return true
 }

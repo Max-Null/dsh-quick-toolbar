@@ -126,35 +126,3 @@ test('runAdapter: open-settings path 暂不支持 → 警告 + 仍执行锚点�
     console.warn = warn
   }
 })
-
-test('runAdapter: scan 走 scan/template/report 通道（建议制，只发现+提示词）', () => {
-  let scanned: readonly { text: string; visible: boolean }[] = []
-  let reported = ''
-  const env = makeEnv({
-    scan: () => {
-      scanned = [{ text: '候选一', visible: true, tag: 'BUTTON', ariaLabel: null, title: null, hint: '.btn' } as never]
-      return scanned
-    },
-    template: () => '{"act":{"kind":"click"}}',
-    report: (t) => { reported = t },
-  })
-  const adapter = builtinAdapter('dsh-scout')!
-  assert.ok(adapter)
-  assert.equal(runAdapter(adapter!, env), true)
-  assert.ok(reported.includes('候选一'))
-  assert.ok(reported.includes('{"act":{"kind":"click"}}'))
-})
-
-test('runAdapter: scan 无通道 → 警告 + false', () => {
-  const env = makeEnv()
-  const warn = console.warn
-  let warned = 0
-  console.warn = () => { warned++ }
-  try {
-    const adapter = builtinAdapter('dsh-scout')!
-    assert.equal(runAdapter(adapter!, env), false)
-    assert.equal(warned, 1)
-  } finally {
-    console.warn = warn
-  }
-})

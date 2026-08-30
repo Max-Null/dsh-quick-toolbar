@@ -5,9 +5,8 @@
  * 行为库保持窄接口（可测）；本层唯一负责 DOM 绑定（browser 环境，
  * 不在 node:test 的范围里——DOM 交互留给 L2 环境验证）。
  */
-import { actClick, actTogglePanel, actDispatchEvent, actOpenSettings, actCommand, actScan, type Clickable } from './behaviors.ts'
+import { actClick, actTogglePanel, actDispatchEvent, actOpenSettings, actCommand, type Clickable } from './behaviors.ts'
 import type { AdapterDef } from './adapters.ts'
-import type { ScoutCandidate } from './scout.ts'
 
 /** 执行环境（浏览器 window 绑定） */
 export interface ActEnv {
@@ -26,12 +25,6 @@ export interface ActEnv {
    * composer 输入模拟——实现由 client 环境注入；缺失 = 环境不支持，警告 + false。
    */
   runCommand?(name: string): boolean
-  /** 扫描未识别按钮（v2 M2：建议制——只发现+提示词）。 */
-  scan?(): readonly ScoutCandidate[]
-  /** 适配模板（scout 提示词拼装）。 */
-  template?(): string
-  /** 呈现扫描结果（复制/提示条——环境实现）。 */
-  report?(text: string): void
 }
 
 /** 选择器转义（不依赖 CSS 全局——node:test 无 DOM/CSS，行为库测试可用） */
@@ -77,17 +70,6 @@ export function runAdapter(adapter: AdapterDef, env: ActEnv): boolean {
         return false
       }
       return actCommand({ execute: env.runCommand }, adapter.act.name)
-    }
-    case 'scan': {
-      if (env.scan === undefined || env.report === undefined) {
-        console.warn('quick-toolbar: scan 环境不可用（无 scan/report 通道）')
-        return false
-      }
-      return actScan({
-        scan: env.scan,
-        template: env.template !== undefined ? env.template : () => '',
-        report: env.report,
-      })
     }
   }
 }

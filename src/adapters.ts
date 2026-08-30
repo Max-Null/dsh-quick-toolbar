@@ -14,7 +14,6 @@ export type ActDef =
   | { kind: 'dispatch-event'; event: string; detail?: string }
   | { kind: 'open-settings'; path?: string }
   | { kind: 'command'; name: string }
-  | { kind: 'scan' }
 
 /** 图标来源：from-button（扣原按钮）/ custom（emoji 或 svg data-uri） */
 export type IconDef = { source: 'from-button' } | { source: 'custom'; value: string }
@@ -83,15 +82,6 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
     icon: { source: 'custom', value: 'settings' },
     label: '设置',
     act: { kind: 'open-settings' },
-    hide: false,
-  },
-  {
-    // 未识别按钮扫描（v2 M2 最小闭环）：发现环境按钮 → 生成提示词（建议制 V2-2）。
-    id: 'dsh-scout',
-    button: 'button[aria-label="扫描"]',
-    icon: { source: 'custom', value: 'scan' },
-    label: '扫描',
-    act: { kind: 'scan' },
     hide: false,
   },
 ]
