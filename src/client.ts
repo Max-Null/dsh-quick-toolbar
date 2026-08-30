@@ -302,13 +302,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-add{border:1px dashed var(--dsw-alias-border-strong,rgba(128,148,168,.45));background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left;margin-top:2px;transition:color .15s,border-color .15s,background .15s}',
       '#ssid-toolbar .ssid-tb-add:hover{color:var(--dsw-alias-label-primary,#d8e0ea);border-color:var(--dsw-alias-label-secondary,#98a2b3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-add svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
-      // 滑动删除行（v0.7.2，iOS 样式）：壳 DOM = 按钮+删除块一起左右滑；
-      // 壳宽 = 行宽+56（删除块初始在视口外，被容器 overflow 裁切）
+      // 滑动删除行（v0.7.4，iOS 样式）：壳 slide 宽度恒等于行宽（防面板被
+      // calc(100%+56px) 自增环撑宽）；删除块 absolute right:-56 随壳平移——
+      // 静止在视口外（容器裁切）、open 时随壳滑入视口右缘
       '.ssid-tb-row{position:relative;overflow:hidden;border-radius:8px}',
-      '.ssid-tb-slide{display:flex;width:calc(100% + 56px);transition:transform .2s ease}',
-      '.ssid-tb-row .ssid-tb-btn{flex:1 1 auto;position:relative;z-index:1;box-sizing:border-box}',
+      '.ssid-tb-slide{display:flex;position:relative;width:100%;transition:transform .2s ease}',
+      '.ssid-tb-row .ssid-tb-btn{flex:1 1 auto;min-width:0;position:relative;z-index:1;box-sizing:border-box;background:transparent}',
       '.ssid-tb-row.ssid-tb-row-open .ssid-tb-slide{transform:translateX(-56px)}',
-      '.ssid-tb-del{flex:none;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;font-weight:500;border-radius:8px 0 0 8px}',
+      '.ssid-tb-del{position:absolute;right:-56px;top:0;bottom:0;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;font-weight:500;border-radius:8px 0 0 8px}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
