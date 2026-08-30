@@ -24,13 +24,21 @@ A **plugin-button aggregator** for [DeepSeek Harness](https://github.com/deepsee
 
 ## 截图
 
+### 动态聚合（GIF 实录）
+
 | 聚合面板（内置 + LLM 注册按钮 + ➕） | 右键滑动删除（注销制） |
 |---|---|
-| ![聚合面板](docs/shots/panel-aggregated.png) | ![滑动删除](docs/shots/panel-slide-delete.png) |
+| ![聚合面板](docs/shots/panel-aggregated.gif) | ![滑动删除](docs/shots/panel-slide-delete.gif) |
 
 | 二次点击关闭（引擎探测语义） | ➕ LLM 注册会话（反问 → 探查 → 注册） |
 |---|---|
-| ![二次点击关闭](docs/shots/second-click-open.png) | ![LLM 注册会话](docs/shots/llm-register-session.png) |
+| ![二次点击关闭](docs/shots/second-click-open.gif) | ![LLM 注册会话](docs/shots/llm-register-session.gif) |
+
+### 一图两景：聚合面板 × LLM 反问（真实环境）
+
+![面板与 LLM 反问](docs/shots/panel-with-llm.png)
+
+> Remote 为用户 LLM 现场注册的按钮（ds-harness-remote 入口）——演示「任何插件按钮都能聚合进统一入口」；右侧面板同时展示 LLM 按任务书先反问目标、再探查注册的完整流程。
 
 | SSiD 标题栏（壳） | web 悬浮球 |
 |---|---|
