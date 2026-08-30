@@ -57,7 +57,8 @@ LLM 注册完就无需在场；那份 JSON 可导出、可备份、可随环境�
 
 **删除按钮**：在工具栏面板里**右键点击该按钮 → 「删除此按钮」**（仅用户注册的按钮；
 内置按钮不可删）。删除后原按钮恢复显示、配置写回 `~/.dsh/quick-toolbar-adapters.json`
-（也可直接手动编辑该 JSON）。
+（也可直接手动编辑该 JSON）。**SSiD 壳环境路径**：标题栏「悬浮球」开关（圆圈+圆点）→
+球显示 → 点球展开面板 → 右键按钮 → 滑出「删除」。
 
 > **English quick start** — *Moving a button in is NOT a settings task: open a session and let the on-site LLM do it.* Click the **➕ "Add button"** in the toolbar panel; the plugin creates an "Add button" session and injects the registration brief into it (auto-runs; falls back to a composer draft if the session service is unavailable). The LLM will first ask you which button to migrate / what new button you want, then it explores the environment, verifies the selector, writes `{ "adapters": [...] }` to `~/.dsh/quick-toolbar-adapters.json`, and you refresh the page. Registration results are plain data — the carrier derives icon/text/click from the original button, and the LLM is no longer needed afterwards.
 
