@@ -302,10 +302,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-add{border:1px dashed var(--dsw-alias-border-strong,rgba(128,148,168,.45));background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left;margin-top:2px;transition:color .15s,border-color .15s,background .15s}',
       '#ssid-toolbar .ssid-tb-add:hover{color:var(--dsw-alias-label-primary,#d8e0ea);border-color:var(--dsw-alias-label-secondary,#98a2b3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-add svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
-      // 右键删除菜单（v0.6.0）
-      '.ssid-tb-menu{position:fixed;z-index:10001;background:var(--dsw-alias-surface-float,rgba(24,28,36,.96));border:1px solid var(--dsw-alias-border-strong,rgba(128,148,168,.45));border-radius:8px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.35)}',
-      '.ssid-tb-menu button{border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);border-radius:6px;height:28px;padding:0 14px;font-size:12px;cursor:pointer;white-space:nowrap;text-align:left}',
-      '.ssid-tb-menu button:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
+      // 右键删除菜单（v0.6.0）——背景/边框/文字用 DSH 官方 token（ui-theme 注册的
+      // --dsw-alias-bg-overlay / border-l2 / label-primary，light/dark 双值自适应）
+      '.ssid-tb-menu{position:fixed;z-index:10001;background:var(--dsw-alias-bg-overlay,#fff);border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));border-radius:8px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}',
+      '.ssid-tb-menu button{border:0;background:transparent;color:var(--dsw-alias-label-primary,#1f2329);border-radius:6px;height:28px;padding:0 14px;font-size:12px;cursor:pointer;white-space:nowrap;text-align:left}',
+      '.ssid-tb-menu button:hover{background:var(--dsw-alias-bg-layer-2,rgba(128,148,168,.14))}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -545,11 +546,6 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         setTimeout(function () { document.addEventListener('mousedown', onMenuOutside) }, 0)
       }
       function removeUserAdapter(ad: AdapterDef) {
-        // 恢复原按钮显示（渲染时被缺省 hide 隐藏）——删除 = 换位置的反向操作
-        try {
-          var orig = document.querySelector(ad.button) as HTMLElement | null
-          if (orig !== null) orig.style.display = ''
-        } catch (_e) {}
         fetch('/quick-toolbar/api/adapters')
           .then(function (r) { return r.json() })
           .then(function (data: unknown) {
@@ -564,12 +560,17 @@ import { REGISTER_BRIEF } from './register-brief.ts'
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ adapters: next }),
             }).then(function (r) { return r.json() }).then(function (res) {
-              if (res !== null && typeof res === 'object' && (res as { ok?: unknown }).ok === true) {
-                try {
-                  var btn = panel.querySelector('[data-adapter-id="' + ad.id.replace(/"/g, '\\"') + '"]')
-                  if (btn !== null && btn.parentNode === panel) panel.removeChild(btn)
-                } catch (_e) {}
-              }
+              // 写回成功后才执行界面反向操作——避免「界面删了但没落盘」的不一致
+              if (res === null || typeof res !== 'object' || (res as { ok?: unknown }).ok !== true) return
+              try {
+                var btn = panel.querySelector('[data-adapter-id="' + ad.id.replace(/"/g, '\\"') + '"]')
+                if (btn !== null && btn.parentNode === panel) panel.removeChild(btn)
+              } catch (_e) {}
+              // 恢复原按钮显示（渲染时被缺省 hide 隐藏）——删除 = 换位置的反向操作
+              try {
+                var orig = document.querySelector(ad.button) as HTMLElement | null
+                if (orig !== null) orig.style.display = ''
+              } catch (_e2) {}
             })
           })
           .catch(function () {})
