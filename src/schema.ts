@@ -20,7 +20,16 @@ export const adapterSchema = z.object({
   label: z.string().optional(),
   act: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('click') }),
-    z.object({ kind: z.literal('toggle-panel'), close: z.string().optional() }),
+    // 二次点击事件（v0.8.0）：secondClick 关闭通道优先；close 旧字段兼容（字符串简写）
+    z.object({
+      kind: z.literal('toggle-panel'),
+      secondClick: z.union([
+        z.string().min(1),
+        z.object({ kind: z.literal('mask') }),
+        z.object({ kind: z.literal('click'), selector: z.string().min(1) }),
+      ]).optional(),
+      close: z.string().optional(),
+    }),
     z.object({ kind: z.literal('dispatch-event'), event: z.string(), detail: z.string().optional() }),
     z.object({ kind: z.literal('open-settings'), path: z.string().optional() }),
     z.object({ kind: z.literal('command'), name: z.string() }),

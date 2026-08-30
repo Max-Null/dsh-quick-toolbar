@@ -50,7 +50,7 @@
 | kind | 语义 | 参数 |
 |---|---|---|
 | `click` | 直接点击 | — |
-| `toggle-panel` | 面板开/关（**再点关闭**：探测弹窗内关闭按钮，写 `close` 选择器） | `close?`：关闭按钮选择器（探测验证过） |
+| `toggle-panel` | **二次点击事件**：弹窗开 → 按 `secondClick` 通道关闭；关 → 点原按钮打开 | `secondClick?`：`{"kind":"mask"}`（点遮罩，**推荐**）/ `{"kind":"click","selector":"…"}` / 选择器字符串（旧 `close` 字段兼容） |
 | `dispatch-event` | 派发 CustomEvent | `event`（事件名）、`detail?` |
 | `open-settings` | 打开设置面板（引擎语义锚点定位，再点关闭） | `path?`（暂不支持） |
 | `command` | 注入斜杠命令草稿到输入框（用户确认后发送） | `name`（不含 `/`） |

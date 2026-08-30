@@ -64,7 +64,7 @@ export const REGISTER_BRIEF = `# 任务：为「工具栏插件」迁移 / 新�
 | kind | 语义 |
 |---|---|
 | \`click\` | 直接点击 |
-| \`toggle-panel\` | 面板开/关（**再点关闭**：探测弹窗内关闭按钮写 \`close\` 选择器） |
+| \`toggle-panel\` | **二次点击事件**：弹窗开 → 按 \`secondClick\` 通道关闭；关 → 点原按钮打开。\`secondClick\` 推荐 \`{ "kind": "mask" }\`（点遮罩关闭——DSH 弹窗通用交互）；或点关闭按钮 \`{ "kind": "click", "selector": "验证过的关闭按钮" }\`（也可直接写选择器字符串） |
 | \`dispatch-event\` | 派发 CustomEvent（\`event\`、\`detail?\`） |
 | \`open-settings\` | 打开设置面板（引擎语义锚点定位，再点关闭） |
 | \`command\` | 向输入框注入斜杠命令草稿（\`name\`，不含 \`/\`） |

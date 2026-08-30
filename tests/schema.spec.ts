@@ -70,3 +70,18 @@ test('parseUserAdapters: hide:false 显式保留 → 合法（换位置语义例
   assert.equal(r.ok, true)
   if (r.ok) assert.equal(r.value.adapters[0]!.hide, false)
 })
+
+test('parseUserAdapters: secondClick mask 通道 → 合法（二次点击事件）', () => {
+  const r = parseUserAdapters(JSON.stringify({ adapters: [{ id: 'm', button: '.b', act: { kind: 'toggle-panel', secondClick: { kind: 'mask' } } }] }))
+  assert.equal(r.ok, true)
+})
+
+test('parseUserAdapters: secondClick click 对象 + 旧 close 兼容 → 合法', () => {
+  const r = parseUserAdapters(JSON.stringify({ adapters: [{ id: 'm2', button: '.b', act: { kind: 'toggle-panel', secondClick: { kind: 'click', selector: '.x' }, close: '.old' } }] }))
+  assert.equal(r.ok, true)
+})
+
+test('parseUserAdapters: secondClick 未知 kind → 拒绝', () => {
+  const r = parseUserAdapters(JSON.stringify({ adapters: [{ id: 'm3', button: '.b', act: { kind: 'toggle-panel', secondClick: { kind: 'fly' } } }] }))
+  assert.equal(r.ok, false)
+})

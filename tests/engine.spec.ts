@@ -13,10 +13,6 @@ function makeEnv(overrides: Partial<ActEnv> = {}): ActEnv & { calls: string[] } 
       calls.push(`find:${sel}`)
       return null // 默认无目标
     },
-    findPanel: (sel) => {
-      calls.push(`findPanel:${sel}`)
-      return null
-    },
     dispatch: (event, detail) => {
       calls.push(`dispatch:${event}:${String(detail)}`)
       return true
@@ -44,12 +40,71 @@ test('runAdapter: click 定位失败静默跳过（插件未装/改版——绝�
   assert.ok(env.calls.some((c) => c.startsWith('find:')))
 })
 
-test('runAdapter: toggle-panel 面板缺失 → 静默（不假装成功）', () => {
-  const env = makeEnv()
-  const adapter = builtinAdapter('dsh-session-manager')
-  assert.ok(adapter)
-  assert.equal(runAdapter(adapter!, env), false)
-  assert.ok(env.calls.some((c) => c.startsWith('findPanel:')))
+test('runAdapter: toggle-panel close 可见 → 点 close 关闭（v0.8.0 探测语义）', () => {
+  let closed = 0
+  let opened = 0
+  const env = makeEnv({
+    find: (sel) => {
+      if (sel === '.remote-close') return { click: () => { closed++ }, disabled: false } as unknown as HTMLElement
+      return null
+    },
+    isVisible: () => true,
+  })
+  const adapter = { ...builtinAdapter('dsh-session-manager')!, act: { kind: 'toggle-panel', close: '.remote-close' } as const, button: '.remote-btn' }
+  assert.equal(runAdapter(adapter, env), true)
+  assert.equal(closed, 1)
+  assert.equal(opened, 0)
+})
+
+test('runAdapter: toggle-panel close 不可见/不存在 → 点原按钮打开（探测语义）', () => {
+  let opened = 0
+  const env = makeEnv({
+    find: (sel) =>
+      sel === '.remote-btn'
+        ? { click: () => { opened++ }, disabled: false } as unknown as HTMLElement
+        : null,
+    isVisible: () => false,
+  })
+  const adapter = { ...builtinAdapter('dsh-session-manager')!, act: { kind: 'toggle-panel', close: '.remote-close' } as const, button: '.remote-btn' }
+  assert.equal(runAdapter(adapter, env), true)
+  assert.equal(opened, 1)
+})
+
+test('runAdapter: toggle-panel 弹窗关着但原按钮定位失败 → 静默 false', () => {
+  const env = makeEnv({ isVisible: () => false })
+  const adapter = { ...builtinAdapter('dsh-session-manager')!, act: { kind: 'toggle-panel', close: '.remote-close' } as const, button: '.remote-btn' }
+  assert.equal(runAdapter(adapter, env), false)
+})
+
+test('runAdapter: toggle-panel secondClick mask 通道 → 命中可见遮罩并点击（二次点击事件）', () => {
+  let maskClicked = 0
+  const env = makeEnv({
+    find: (sel) => {
+      if (sel === '[class$="_backdrop"]') return { click: () => { maskClicked++ }, disabled: false } as unknown as HTMLElement
+      return null
+    },
+    isVisible: () => true,
+  })
+  const adapter = { ...builtinAdapter('dsh-session-manager')!, act: { kind: 'toggle-panel', secondClick: { kind: 'mask' } } as const, button: '.remote-btn' }
+  assert.equal(runAdapter(adapter, env), true)
+  assert.equal(maskClicked, 1)
+})
+
+test('runAdapter: toggle-panel secondClick 优先于旧 close 字段', () => {
+  let closeClicked = 0
+  let maskClicked = 0
+  const env = makeEnv({
+    find: (sel) => {
+      if (sel === '.old-close') return { click: () => { closeClicked++ }, disabled: false } as unknown as HTMLElement
+      if (sel === '[class$="_backdrop"]') return { click: () => { maskClicked++ }, disabled: false } as unknown as HTMLElement
+      return null
+    },
+    isVisible: () => true,
+  })
+  const adapter = { ...builtinAdapter('dsh-session-manager')!, act: { kind: 'toggle-panel', secondClick: { kind: 'mask' }, close: '.old-close' } as const, button: '.remote-btn' }
+  assert.equal(runAdapter(adapter, env), true)
+  assert.equal(maskClicked, 1)
+  assert.equal(closeClicked, 0)
 })
 
 test('runAdapter: 缺省 act → click（换位置缺省语义）', () => {

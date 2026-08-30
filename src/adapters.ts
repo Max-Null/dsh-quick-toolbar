@@ -7,10 +7,21 @@
  * 生成适配写入配置——见 doc/设计）。
  */
 
+/** 二次点击事件的关闭通道（v0.8.0 用户命名：LLM 注册"再点一次时如何关闭"，
+ *  而非脆弱的 CSS 选择器）——字符串 = 点击关闭按钮选择器（简写）；
+ *  {kind:'mask'} = 点遮罩关闭（DSH 弹窗通用交互，推荐优先探测）；
+ *  {kind:'click', selector} 显式形式。 */
+export type SecondClickChannel =
+  | string
+  | { kind: 'mask' }
+  | { kind: 'click'; selector: string }
+
 /** 行为枚举（v1 声明式；引擎行为库实现） */
 export type ActDef =
   | { kind: 'click' }
-  | { kind: 'toggle-panel'; close?: string }
+  /** 二次点击事件：弹窗开着时（引擎按通道可见性判定）执行 secondClick 关闭动作；
+   *  关着时点击原按钮打开。 */
+  | { kind: 'toggle-panel'; secondClick?: SecondClickChannel; close?: string }
   | { kind: 'dispatch-event'; event: string; detail?: string }
   | { kind: 'open-settings'; path?: string }
   | { kind: 'command'; name: string }

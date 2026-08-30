@@ -10,7 +10,6 @@ import {
   actOpenSettings,
   actCommand,
   type Clickable,
-  type PanelLike,
   type DispatchEnv,
 } from '../src/behaviors.ts'
 
@@ -44,40 +43,29 @@ test('actClick: 禁用按钮不点击（空指针对策：目标缺失/禁用均
   assert.equal(btn.clicked, 0)
 })
 
-test('actTogglePanel: 面板开着 → 点关闭按钮（原生无再点关闭的适配）', () => {
-  let open = true
-  const panel: PanelLike = {
-    isOpen: () => open,
-    open: () => {
-      open = true
-    },
-    close: () => {
-      open = false
-    },
-  }
+test('actTogglePanel: 弹窗开着（close 可见）→ 点关闭按钮', () => {
   const closeBtn = makeClickable()
-  assert.equal(actTogglePanel(panel, closeBtn), true)
+  const openBtn = makeClickable()
+  assert.equal(actTogglePanel(openBtn, closeBtn, () => true), true)
   assert.equal(closeBtn.clicked, 1) // 关闭按钮被点
+  assert.equal(openBtn.clicked, 0)
 })
 
-test('actTogglePanel: 面板关着 → open()', () => {
-  let open = false
-  const panel: PanelLike = {
-    isOpen: () => open,
-    open: () => {
-      open = true
-    },
-    close: () => {
-      open = false
-    },
-  }
-  assert.equal(actTogglePanel(panel, null), true)
-  assert.equal(open, true)
+test('actTogglePanel: 弹窗关着（close 不可见/缺失）→ 点原按钮打开', () => {
+  const openBtn = makeClickable()
+  assert.equal(actTogglePanel(openBtn, null, () => false), true)
+  assert.equal(openBtn.clicked, 1)
+  // close 目标存在但不可见 → 同样走打开
+  const closeBtn = makeClickable()
+  assert.equal(actTogglePanel(openBtn, closeBtn, () => false), true)
+  assert.equal(openBtn.clicked, 2)
+  assert.equal(closeBtn.clicked, 0)
 })
 
-test('actTogglePanel: 开着但关闭目标缺失 → 不误点其他，返回 false', () => {
-  const panel: PanelLike = { isOpen: () => true, open: () => {}, close: () => {} }
-  assert.equal(actTogglePanel(panel, null), false)
+test('actTogglePanel: 弹窗关着但原按钮缺失/禁用 → false（不误点）', () => {
+  assert.equal(actTogglePanel(null, null, () => false), false)
+  const disabled = makeClickable({ disabled: true })
+  assert.equal(actTogglePanel(disabled, null, () => false), false)
 })
 
 test('actDispatchEvent: 派发 CustomEvent 携带 detail', () => {

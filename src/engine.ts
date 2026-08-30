@@ -6,14 +6,12 @@
  * 不在 node:test 的范围里——DOM 交互留给 L2 环境验证）。
  */
 import { actClick, actTogglePanel, actDispatchEvent, actOpenSettings, actCommand, type Clickable } from './behaviors.ts'
-import type { AdapterDef } from './adapters.ts'
+import type { ActDef, AdapterDef } from './adapters.ts'
 
 /** 执行环境（浏览器 window 绑定） */
 export interface ActEnv {
   /** 按选择器定位元素（可空） */
   find(selector: string): HTMLElement | null
-  /** 按选择器定位「可关闭的面板容器」（用于 toggle 探测；无则 null） */
-  findPanel(selector: string): { isOpen(): boolean; open(): void; close(): void } | null
   /** 事件派发（CustomEvent） */
   dispatch(event: string, detail?: unknown): boolean
   /**
@@ -21,15 +19,64 @@ export interface ActEnv {
    */
   findByText?(texts: readonly string[]): HTMLElement | null
   /**
+   * 可见性探测（toggle-panel 探测语义用——close 目标可见 = 弹窗开）。
+   * 缺省 = env 内建的 rect/computedStyle 判定。
+   */
+  isVisible?(el: unknown): boolean
+  /**
    * 执行文本命令（可选通道：DSH master 的 remote.commands.execute；旧版回退
    * composer 输入模拟——实现由 client 环境注入；缺失 = 环境不支持，警告 + false。
    */
   runCommand?(name: string): boolean
 }
 
-/** 选择器转义（不依赖 CSS 全局——node:test 无 DOM/CSS，行为库测试可用） */
-function cssEscape(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`)
+/** 遮罩关闭候选链（第二次点击的 mask 通道——DSH 弹窗多为遮罩交互） */
+const MASK_CHAINS = [
+  '[class$="_backdrop"]',
+  '[class*="backdrop"]',
+  '[class$="_mask"]',
+  '[class*="modal-mask"]',
+] as const
+
+/**
+ * 归一 secondClick 通道（v0.8.0「二次点击事件」）：secondClick 优先，close 旧字段
+ * 兼容（字符串简写 = 点击关闭按钮）。
+ */
+function closeTargetOf(
+  act: Extract<ActDef, { kind: 'toggle-panel' }>,
+  env: ActEnv,
+): HTMLElement | null {
+  const spec = act.secondClick ?? act.close ?? null
+  if (spec === null) return null
+  if (typeof spec === 'string') return env.find(spec)
+  if (spec.kind === 'mask') {
+    const probe = env.isVisible ?? defaultIsVisible
+    for (let i = 0; i < MASK_CHAINS.length; i++) {
+      const el = env.find(MASK_CHAINS[i])
+      if (el !== null && probe(el)) return el
+    }
+    return null
+  }
+  return env.find(spec.selector)
+}
+
+/** 缺省可见性探测（DOM：offset 尺寸优先，computedStyle 兜底） */
+function defaultIsVisible(el: unknown): boolean {
+  if (el === null || typeof el !== 'object') return false
+  const node = el as HTMLElement
+  if (typeof node.offsetWidth === 'number') {
+    if (node.offsetWidth > 0 || node.offsetHeight > 0) return true
+    return false
+  }
+  if (typeof getComputedStyle === 'function') {
+    try {
+      const style = getComputedStyle(node)
+      return style.display !== 'none' && style.visibility !== 'hidden'
+    } catch {
+      return false
+    }
+  }
+  return false
 }
 
 /** 按内置定义执行一条适配器（防御执行：定位失败/禁用 → false，绝不误伤）
@@ -44,16 +91,14 @@ export function runAdapter(adapter: AdapterDef, env: ActEnv): boolean {
     case 'dispatch-event':
       return env.dispatch(act.event, act.detail)
     case 'toggle-panel': {
-      // 面板定位（默认取本插件按钮所在的面板容器；close 目标按选择器探测）
-      const panel = env.findPanel(`#${cssEscape(adapter.id)}-panel`)
-      if (panel !== null) {
-        const closeEl = act.close !== undefined
-          ? (env.find(act.close) as Clickable | null)
-          : null
-        return actTogglePanel(panel, closeEl)
-      }
-      // 面板容器缺失（插件未装/未激活）→ 静默跳过
-      return false
+      // 二次点击事件（v0.8.0）：关闭通道可见 = 弹窗开 → 执行关闭；不可见 = 弹窗关
+      // → 点原按钮打开。原实现依赖 findPanel/#id-panel 容器协议——从未有环境实现
+      // （client 半 findPanel 恒 null；内置项走 toolbarAction 桥接不经引擎），
+      // 用户适配器 toggle-panel 因此死路（「添加按钮2」LLM 源码实测发现）。
+      const closeEl = closeTargetOf(act, env)
+      const target = env.find(adapter.button)
+      const probe = env.isVisible ?? defaultIsVisible
+      return actTogglePanel(target as Clickable | null, closeEl, probe)
     }
     case 'open-settings': {
       // v2 调研点①：DSH 无公开 window 钩子——footer trigger 文本语义优先 + 锚点链兜底。

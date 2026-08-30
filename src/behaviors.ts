@@ -13,13 +13,6 @@ export interface Clickable {
   disabled?: boolean
 }
 
-/** 面板容器最小接口（toggle 探测） */
-export interface PanelLike {
-  isOpen(): boolean
-  open(): void
-  close(): void
-}
-
 /** 事件派发环境（浏览器 window / 测试 stub） */
 export interface DispatchEnv {
   dispatchEvent(event: Event): boolean
@@ -35,21 +28,25 @@ export function actClick(target: Clickable | null | undefined): boolean {
 }
 
 /**
- * 面板开/关：再点关闭（探测 close 选择器内的「关闭」按钮——原生无
- * 再点关闭的插件（如 dsh-session-manager 0.4.x）走此行为。
+ * 面板开/关（v0.8.0 探测语义——替代已废弃的面板容器协议 findPanel/#id-panel，
+ * 该协议从未有环境实现：client 半 findPanel 恒 null，内置项走 toolbarAction 桥接，
+ * 用户适配器因此死路——「添加按钮2」会话 LLM 源码实测发现）：
+ * close 目标**可见** = 弹窗开着 → 点它关闭；**不可见/不存在** = 弹窗关着 → 点原按钮打开。
+ * @param openTarget 原按钮（弹窗关着时点击它打开）
+ * @param closeTarget 弹窗内关闭按钮（LLM 探测、随弹窗显隐）
+ * @param probeVisible 可见性探测（DOM 环境 = rect/computedStyle；测试可 stub）
  */
 export function actTogglePanel(
-  panel: PanelLike,
+  openTarget: Clickable | null | undefined,
   closeTarget: Clickable | null | undefined,
+  probeVisible: (el: unknown) => boolean,
 ): boolean {
-  if (panel.isOpen()) {
-    if (closeTarget !== null && closeTarget !== undefined && closeTarget.disabled !== true) {
-      closeTarget.click()
-      return true
-    }
-    return false
+  if (closeTarget !== null && closeTarget !== undefined && closeTarget.disabled !== true && probeVisible(closeTarget)) {
+    closeTarget.click()
+    return true
   }
-  panel.open()
+  if (openTarget === null || openTarget === undefined || openTarget.disabled === true) return false
+  openTarget.click()
   return true
 }
 
