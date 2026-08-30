@@ -302,11 +302,12 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-add{border:1px dashed var(--dsw-alias-border-strong,rgba(128,148,168,.45));background:transparent;color:var(--dsw-alias-label-tertiary,#7b8494);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left;margin-top:2px;transition:color .15s,border-color .15s,background .15s}',
       '#ssid-toolbar .ssid-tb-add:hover{color:var(--dsw-alias-label-primary,#d8e0ea);border-color:var(--dsw-alias-label-secondary,#98a2b3);background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
       '#ssid-toolbar .ssid-tb-add svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
-      // 右键删除菜单（v0.6.0）——背景/边框/文字用 DSH 官方 token（ui-theme 注册的
-      // --dsw-alias-bg-overlay / border-l2 / label-primary，light/dark 双值自适应）
-      '.ssid-tb-menu{position:fixed;z-index:10001;background:var(--dsw-alias-bg-overlay,#fff);border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));border-radius:8px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}',
-      '.ssid-tb-menu button{border:0;background:transparent;color:var(--dsw-alias-label-primary,#1f2329);border-radius:6px;height:28px;padding:0 14px;font-size:12px;cursor:pointer;white-space:nowrap;text-align:left}',
-      '.ssid-tb-menu button:hover{background:var(--dsw-alias-bg-layer-2,rgba(128,148,168,.14))}',
+      // 滑动删除行（v0.7.0，iOS 样式）：行容器 overflow 裁剪，按钮左滑露出红色删除块；
+      // 背景/文字用 DSH 官方 token（light/dark 双值自适应）
+      '.ssid-tb-row{position:relative;overflow:hidden;border-radius:8px}',
+      '.ssid-tb-row .ssid-tb-btn{position:relative;z-index:1;transition:transform .18s ease}',
+      '.ssid-tb-row.ssid-tb-row-open .ssid-tb-btn{transform:translateX(-56px)}',
+      '.ssid-tb-del{position:absolute;right:0;top:0;bottom:0;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;border-radius:8px;font-weight:500}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -517,34 +518,18 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         // → 引擎执行（label/icon 直显；open-settings 语义锚点链）。
         renderButton(adapter, kind !== undefined ? kind : null)
       }
-      // ── 右键删除菜单（v0.6.0，仅用户适配器）────────────────────────────
-      var adapterMenuEl: HTMLElement | null = null
-      var onMenuOutside = function (e: MouseEvent) {
-        if (adapterMenuEl !== null && !adapterMenuEl.contains(e.target as Node)) closeAdapterMenu()
+      // ── 滑动删除（v0.7.0，仅用户适配器；iOS 样式）：右键 → 行左滑露出「删除」─
+      var slideCloseAll = function () {
+        var rows = panel.querySelectorAll('.ssid-tb-row.ssid-tb-row-open')
+        for (var ri = 0; ri < rows.length; ri++) rows[ri].classList.remove('ssid-tb-row-open')
       }
-      function closeAdapterMenu() {
-        if (adapterMenuEl !== null && adapterMenuEl.parentNode !== null) adapterMenuEl.parentNode.removeChild(adapterMenuEl)
-        adapterMenuEl = null
-        document.removeEventListener('mousedown', onMenuOutside)
-      }
-      function showAdapterMenu(x: number, y: number, ad: AdapterDef) {
-        closeAdapterMenu()
-        var menu = document.createElement('div')
-        menu.className = 'ssid-tb-menu'
-        var del = document.createElement('button')
-        del.type = 'button'
-        del.textContent = '删除此按钮'
-        del.addEventListener('click', function () { closeAdapterMenu(); removeUserAdapter(ad) })
-        menu.appendChild(del)
-        document.body.appendChild(menu)
-        var w = menu.offsetWidth || 120
-        var h = menu.offsetHeight || 30
-        menu.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + 'px'
-        menu.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px'
-        adapterMenuEl = menu
-        // 延迟挂 outside 关闭（避免本次 contextmenu 冒泡立即误关）
-        setTimeout(function () { document.addEventListener('mousedown', onMenuOutside) }, 0)
-      }
+      // 点击行外 → 回弹（一次性全局监听，挂载于 createToolbar 内）
+      document.addEventListener('mousedown', function (e: MouseEvent) {
+        var t = e.target as Node | null
+        if (t === null) return
+        var inRow = t instanceof Element ? t.closest('.ssid-tb-row') !== null : false
+        if (!inRow) slideCloseAll()
+      })
       function removeUserAdapter(ad: AdapterDef) {
         fetch('/quick-toolbar/api/adapters')
           .then(function (r) { return r.json() })
@@ -563,8 +548,9 @@ import { REGISTER_BRIEF } from './register-brief.ts'
               // 写回成功后才执行界面反向操作——避免「界面删了但没落盘」的不一致
               if (res === null || typeof res !== 'object' || (res as { ok?: unknown }).ok !== true) return
               try {
-                var btn = panel.querySelector('[data-adapter-id="' + ad.id.replace(/"/g, '\\"') + '"]')
-                if (btn !== null && btn.parentNode === panel) panel.removeChild(btn)
+                var btn = panel.querySelector('[data-adapter-id="' + ad.id.replace(/"/g, '\\"') + '"]') as HTMLElement | null
+                var row = btn !== null && typeof btn.closest === 'function' ? btn.closest('.ssid-tb-row') as HTMLElement | null : null
+                if (row !== null && row.parentNode === panel) panel.removeChild(row)
               } catch (_e) {}
               // 恢复原按钮显示（渲染时被缺省 hide 隐藏）——删除 = 换位置的反向操作
               try {
@@ -575,12 +561,30 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           })
           .catch(function () {})
       }
-      function attachAdapterMenu(btn: HTMLElement, ad: AdapterDef) {
+      // 用户适配器按钮包行容器（带右滑删除红块），右键触发左滑
+      function wrapAdapterRow(btn: HTMLElement, ad: AdapterDef) {
+        var row = document.createElement('div')
+        row.className = 'ssid-tb-row'
+        if (btn.parentNode !== null) btn.parentNode.removeChild(btn)
+        row.appendChild(btn)
+        var delBtn = document.createElement('button')
+        delBtn.type = 'button'
+        delBtn.className = 'ssid-tb-del'
+        delBtn.textContent = '删除'
+        delBtn.addEventListener('click', function () {
+          slideCloseAll()
+          removeUserAdapter(ad)
+        })
+        row.appendChild(delBtn)
+        panel.insertBefore(row, addBtn)
+        btn.setAttribute('data-user-adapter', '1')
         btn.addEventListener('contextmenu', function (e: MouseEvent) {
           e.preventDefault()
           e.stopPropagation()
-          showAdapterMenu(e.clientX, e.clientY, ad)
+          slideCloseAll()
+          row.classList.add('ssid-tb-row-open')
         })
+        return row
       }
       // 用户适配器管线：fetch host API（zod 已校验入项——客户端信任 host 层），
       // 同 id 覆盖（重建按钮、行为按用户 act 执行），无 id 映射→引擎执行；
@@ -600,14 +604,15 @@ import { REGISTER_BRIEF } from './register-brief.ts'
               if (user === null || typeof user !== 'object') continue
               var userKind = TOOLBAR_KIND_BY_ADAPTER[user.id]
               try {
-                var old = panel.querySelector('[data-adapter-id="' + user.id.replace(/"/g, '\\"') + '"]')
-                if (old !== null && old.parentNode === panel) panel.removeChild(old)
+                // 旧条目（可能包在滑动行内）整行移除
+                var old = panel.querySelector('[data-adapter-id="' + user.id.replace(/"/g, '\\"') + '"]') as HTMLElement | null
+                var oldRow = old !== null && typeof old.closest === 'function' ? old.closest('.ssid-tb-row') as HTMLElement | null : null
+                if (oldRow !== null && oldRow.parentNode === panel) panel.removeChild(oldRow)
+                else if (old !== null && old.parentNode === panel) panel.removeChild(old)
               } catch (_e) {}
               var userBtn = renderButton(user, userKind !== undefined ? userKind : null)
-              // 右键删除（v0.6.0，仅用户适配器：内置项不渲染删除入口——
-              // 内置在代码里，删除后刷新即回，语义上不可删）
-              userBtn.setAttribute('data-user-adapter', '1')
-              attachAdapterMenu(userBtn, user)
+              // 滑动删除行（v0.7.0）：用户适配器专属包裹
+              wrapAdapterRow(userBtn, user)
             }
           })
           .catch(function () {})
