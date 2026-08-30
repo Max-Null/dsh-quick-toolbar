@@ -576,6 +576,22 @@ import { runAdapter, type ActEnv } from './engine.ts'
         qtState.collapsed = collapsed
         saveState()
       }
+      // 壳尺寸自愈（2026-08-30 用户实测「钉住只显示一半」）：morph 宽度测量若
+      // 发生在按钮文本/i18n/字体异步就位之前，壳宽会定格过小（文字渲染后被
+      // 右缘裁切）——ResizeObserver 在展开态自动同步壳宽高（内容任何变化：
+      // i18n/字体/用户适配器按钮增减均触发）。
+      try {
+        var panelRo = new ResizeObserver(function () {
+          if (!expanded) return
+          var w2 = panel.offsetWidth + 2
+          var h2 = panel.offsetHeight + 2
+          if (root.offsetWidth !== w2 || root.offsetHeight !== h2) {
+            root.style.width = w2 + 'px'
+            root.style.height = h2 + 'px'
+          }
+        })
+        panelRo.observe(panel)
+      } catch (_e) {}
       // 钉住（hover 收起优化，2026-08-30 用户拍板）：未钉住=鼠标移出自动收起、
       // 移入悬浮球展开；钉住=始终展开（状态持久化 ssid-toolbar-pinned）。
       var pinned = false
