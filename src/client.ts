@@ -328,12 +328,47 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       return ICONS[name] || ICONS.grid
     }
 
+    // 用户适配器 by-id 索引（fetchUserAdapters 渲染时填充）——供 findPanel 反查
+    // 「原按钮弹窗」的 toggle 封装（v0.8.0：web 载体支持 toggle-panel 再点关闭）。
+    var userAdapterById: Record<string, AdapterDef> = {}
+
     // v2 M1 引擎环境：find/dispatch ← DOM；runCommand ← composer 草稿注入
     // （execute 通道不可达——实证决策见下注释；注入不自动提交）。
     var toolbarEnv = function (): ActEnv {
       return {
         find: function (s) { return document.querySelector(s) as HTMLElement | null },
-        findPanel: function (s) { return null },
+        findPanel: function (s) {
+          // s = '#<id>-panel'——引擎按适配器 id 请求「可关闭面板容器」封装。
+          // web 载体（v0.8.0）：为 toggle-panel 适配器返回其「原按钮弹窗」的
+          // toggle 包装——isOpen = 弹窗关闭按钮可见（开着才出现）；open = 点原按钮
+          // 打开弹窗；close = 点弹窗内关闭按钮（引擎另会按 act.close 定位 closeEl，
+          // 此处的 close 作兜底）。非 toggle-panel / 定位失败 → null（引擎静默跳过）。
+          var mm = /^#(.+)-panel$/.exec(s || '')
+          if (mm === null) return null
+          var apid = mm[1]
+          var ad: AdapterDef | null = null
+          if (userAdapterById[apid] !== undefined) ad = userAdapterById[apid]
+          else ad = builtinAdapter(apid)
+          if (ad === null) return null
+          var act = ad.act as { kind?: string; close?: string } | undefined
+          if (act === undefined || act.kind !== 'toggle-panel' || !act.close) return null
+          var closeSel = act.close
+          var btnSel = ad.button
+          return {
+            isOpen: function () {
+              var c = document.querySelector(closeSel) as HTMLElement | null
+              return c !== null && c.offsetParent !== null
+            },
+            open: function () {
+              var b = document.querySelector(btnSel) as HTMLElement | null
+              if (b !== null && typeof b.click === 'function') b.click()
+            },
+            close: function () {
+              var c = document.querySelector(closeSel) as HTMLElement | null
+              if (c !== null && typeof c.click === 'function') c.click()
+            },
+          }
+        },
         dispatch: function (event, detail) {
           window.dispatchEvent(new CustomEvent(event, { detail: detail }))
           return true
@@ -614,6 +649,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
             for (var ui = 0; ui < rows.length; ui++) {
               var user = rows[ui] as AdapterDef | null
               if (user === null || typeof user !== 'object') continue
+              userAdapterById[user.id] = user // 供 findPanel（toggle-panel 再点关闭）反查
               var userKind = TOOLBAR_KIND_BY_ADAPTER[user.id]
               try {
                 // 旧条目（可能包在滑动行内）整行移除
