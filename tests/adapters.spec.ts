@@ -15,16 +15,24 @@ function validate(a: AdapterDef): void {
 }
 
 test('内置适配器集：全部结构化合法', () => {
-  assert.equal(BUILTIN_ADAPTERS.length, 4)
+  assert.equal(BUILTIN_ADAPTERS.length, 5)
   for (const a of BUILTIN_ADAPTERS) validate(a)
 })
 
-test('内置适配器集：覆盖现状按钮（插件中心/侧栏/底栏/会话管理）', () => {
+test('内置适配器集：覆盖现状按钮（插件中心/侧栏/底栏/会话管理/设置）', () => {
   const ids = BUILTIN_ADAPTERS.map((a) => a.id)
   assert.ok(ids.includes('dsh-plugin-center'))
   assert.ok(ids.includes('dsh-better-sidebar.sidebar'))
   assert.ok(ids.includes('dsh-better-sidebar.bottom'))
   assert.ok(ids.includes('dsh-session-manager'))
+  assert.ok(ids.includes('dsh-settings'))
+})
+
+test('设置适配：open-settings 行为（语义锚点链——DSH 无公开 window 钩子）', () => {
+  const st = builtinAdapter('dsh-settings')
+  assert.ok(st)
+  assert.equal(st.act.kind, 'open-settings')
+  assert.equal(st.icon.source, 'custom')
 })
 
 test('会话管理适配：toggle-panel 行为（再点关闭——原生不支持）', () => {

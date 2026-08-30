@@ -74,6 +74,16 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
     act: { kind: 'toggle-panel', close: '.sm-modal .close' },
     hide: true,
   },
+  {
+    // 官方设置（v2 M1：语义锚点链——DSH 无公开 window 钩子，见 doc/设计/2026-08-30 v2 A1）。
+    // button 用于展示定位（自绘入口）；面板打开经行为库 SETTINGS_ANCHORS 双 locale 点击。
+    id: 'dsh-settings',
+    button: 'button[aria-label="设置"], button[aria-label="Settings"]',
+    icon: { source: 'custom', value: 'settings' },
+    label: '设置',
+    act: { kind: 'open-settings' },
+    hide: false,
+  },
 ]
 
 /** 按 id 取内置适配器（去重语义：同名后续覆盖） */

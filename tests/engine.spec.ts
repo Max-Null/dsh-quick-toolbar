@@ -52,7 +52,7 @@ test('runAdapter: toggle-panel 面板缺失 → 静默（不假装成功）', ()
   assert.ok(env.calls.some((c) => c.startsWith('findPanel:')))
 })
 
-test('runAdapter: v1 未实现行为（open-settings/command）→ 警告 + false，不吞不假装', () => {
+test('runAdapter: command 无 runCommand 通道 → 警告 + false，不吞不假装', () => {
   const env = makeEnv()
   const warn = console.warn
   let warned = 0
@@ -64,6 +64,64 @@ test('runAdapter: v1 未实现行为（open-settings/command）→ 警告 + fals
     const adapter = builtinAdapter('dsh-plugin-center')!
     assert.equal(runAdapter({ ...adapter, act: { kind: 'command', name: 'x' } }, env), false)
     assert.equal(warned, 1)
+  } finally {
+    console.warn = warn
+  }
+})
+
+test('runAdapter: open-settings 锚点链命中 → 点击（v2 M1 实现）', () => {
+  let clicked = 0
+  const env = makeEnv({
+    find: (sel) => {
+      // 首个锚点命中（中文 aria）
+      return sel === 'button[aria-label="设置"]'
+        ? ({ click: () => { clicked++ }, disabled: false } as unknown as HTMLElement)
+        : null
+    },
+  })
+  const adapter = builtinAdapter('dsh-settings')
+  assert.ok(adapter)
+  assert.equal(runAdapter(adapter!, env), true)
+  assert.equal(clicked, 1)
+})
+
+test('runAdapter: open-settings 全锚点未命中 → false（防御）', () => {
+  const env = makeEnv()
+  const adapter = builtinAdapter('dsh-settings')
+  assert.ok(adapter)
+  assert.equal(runAdapter(adapter!, env), false)
+})
+
+test('runAdapter: command 走 runCommand 通道（成功返真）', () => {
+  let called = ''
+  const env = makeEnv({ runCommand: (name) => { called = name; return true } })
+  const adapter = builtinAdapter('dsh-plugin-center')!
+  assert.equal(runAdapter({ ...adapter, act: { kind: 'command', name: 'compact' } }, env), true)
+  assert.equal(called, 'compact')
+})
+
+test('runAdapter: command 通道返回 false → 透传（环境不支持）', () => {
+  const env = makeEnv({ runCommand: () => false })
+  const adapter = builtinAdapter('dsh-plugin-center')!
+  assert.equal(runAdapter({ ...adapter, act: { kind: 'command', name: 'compact' } }, env), false)
+})
+
+test('runAdapter: open-settings path 暂不支持 → 警告 + 仍执行锚点链', () => {
+  let clicked = 0
+  const env = makeEnv({
+    find: (sel) =>
+      sel === 'button[aria-label="设置"]'
+        ? ({ click: () => { clicked++ }, disabled: false } as unknown as HTMLElement)
+        : null,
+  })
+  const warn = console.warn
+  let warned = 0
+  console.warn = () => { warned++ }
+  try {
+    const adapter = builtinAdapter('dsh-settings')!
+    assert.equal(runAdapter({ ...adapter, act: { kind: 'open-settings', path: 'llm' } }, env), true)
+    assert.equal(warned, 1)
+    assert.equal(clicked, 1)
   } finally {
     console.warn = warn
   }

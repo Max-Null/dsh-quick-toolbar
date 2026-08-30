@@ -32,7 +32,7 @@
  * 「侧边栏自动诊断」同模式。
  */
 
-import { BUILTIN_ADAPTERS, type AdapterDef } from './adapters.ts'
+import { BUILTIN_ADAPTERS, builtinAdapter, type AdapterDef } from './adapters.ts'
 import { runAdapter, type ActEnv } from './engine.ts'
 
 (window as unknown as { __ModuleLoader__: { load: (definition: unknown) => unknown } }).__ModuleLoader__.load({
@@ -269,8 +269,56 @@ import { runAdapter, type ActEnv } from './engine.ts'
         collapse: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5.5h10M6.5 8.5h3M8 11.5h1" stroke-linecap="round"/></svg>',
         menu: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M3 8h10M3 11h10" stroke-linecap="round"/></svg>',
         pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 2.2l4 4-2.6 1.4-1.8 1.8.4 2.6-1.4 1.4-2.6-3L3.9 13l-1-1 3-3.9-3-2.6 1.4-1.4 2.6.4 1.8-1.8z"/></svg>',
+        settings: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/></svg>',
       }
       return ICONS[name] || ICONS.grid
+    }
+
+    // v2 M1 引擎环境：find/dispatch ← DOM；runCommand ← composer 输入模拟
+    // （DSH master 的 remote.commands.execute 需会话作用域 ctx——M2 深整合时接入）。
+    var toolbarEnv = function (): ActEnv {
+      return {
+        find: function (s) { return document.querySelector(s) as HTMLElement | null },
+        findPanel: function (s) { return null },
+        dispatch: function (event, detail) {
+          window.dispatchEvent(new CustomEvent(event, { detail: detail }))
+          return true
+        },
+        findByText: function (texts) {
+          var buttons = document.querySelectorAll('button')
+          for (var bi = 0; bi < buttons.length; bi++) {
+            var label = (buttons[bi].textContent || '').trim()
+            for (var ti = 0; ti < texts.length; ti++) {
+              if (label === texts[ti]) return buttons[bi] as HTMLElement
+            }
+          }
+          return null
+        },
+        runCommand: function (name) { return typeCommandIntoComposer(name) },
+      }
+    }
+    // composer 输入模拟：写入 `/name` + InputEvent + Enter（React 受控 textarea /
+    // contenteditable 双形态；定位失败 → false 静默防御）。
+    function typeCommandIntoComposer(name: string) {
+      var seat = document.querySelector('[data-composer-seat]')
+      var el = (seat !== null && seat !== undefined
+        ? seat.querySelector('textarea, [contenteditable="true"]')
+        : document.querySelector('textarea, [contenteditable="true"]')) as HTMLElement | null
+      if (el === null || el === undefined) return false
+      var text = '/' + name
+      if (el instanceof HTMLTextAreaElement) {
+        var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+        if (setter !== undefined && setter.set !== undefined) setter.set.call(el, text)
+        else el.value = text
+      } else if (el.isContentEditable) {
+        el.textContent = text
+      } else {
+        return false
+      }
+      el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }))
+      el.focus()
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }))
+      return true
     }
 
     function toolbarAction(kind: string) {
@@ -315,35 +363,80 @@ import { runAdapter, type ActEnv } from './engine.ts'
       trackLocale(pinBtn, 'tb.pin', 'title')
       head.appendChild(pinBtn)
       panel.appendChild(head)
-      // 工具栏按钮集 = 内置适配器集驱动（v1.3：数据化——按钮列表随适配器，
-      // 新增插件适配即自动入栏；kind → 图标/i18n 键映射保持 v0.1.x 语义）。
+      // 工具栏按钮集 = 内置适配器集 + 用户适配器管线（v2 M1：host API 拉取 →
+      // 同 id 覆盖内置行为、无 id 映射的条目走适配器引擎执行；kind 映射的内置
+      // 走既有 toolbarAction——老按钮零回归）。
       var TOOLBAR_KIND_BY_ADAPTER: Record<string, string> = {
         'dsh-plugin-center': 'plugin',
         'dsh-better-sidebar.sidebar': 'sidebar',
         'dsh-better-sidebar.bottom': 'bottom',
         'dsh-session-manager': 'sessions',
       }
-      var items: Array<{ kind: string; adapter?: AdapterDef }> = []
-      for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
-        var adapter = BUILTIN_ADAPTERS[ai]
-        var kind = TOOLBAR_KIND_BY_ADAPTER[adapter.id]
-        if (kind === undefined) continue // 未映射图标键的适配器暂不入栏
-        items.push({ kind: kind, adapter: adapter })
+      var adapterIconHtml = function (adapter: AdapterDef, kind: string | null) {
+        if (adapter.icon.source === 'custom') {
+          var value = adapter.icon.value
+          if (value.indexOf('<') === 0) return value
+          return toolbarIcon(value)
+        }
+        return kind !== null ? toolbarIcon(kind) : toolbarIcon('grid')
       }
-      for (var i = 0; i < items.length; i++) {
+      var renderButton = function (adapter: AdapterDef, kind: string | null) {
         var b = document.createElement('button')
         b.type = 'button'
         b.className = 'ssid-tb-btn'
-        b.innerHTML = toolbarIcon(items[i].kind) + '<span></span>'
-        b.setAttribute('aria-label', '')
-        b.title = ''
-        trackLocale(b, 'tb.' + items[i].kind, 'text-span')
-        trackLocale(b, 'tb.' + items[i].kind, 'aria')
-        trackLocale(b, 'tb.' + items[i].kind, 'title')
-        ;(function (kind: string) {
-          b.addEventListener('click', function () { toolbarAction(kind) })
-        })(items[i].kind)
+        b.setAttribute('data-adapter-id', adapter.id)
+        b.innerHTML = adapterIconHtml(adapter, kind) + '<span></span>'
+        if (kind !== null) {
+          b.setAttribute('aria-label', '')
+          b.title = ''
+          trackLocale(b, 'tb.' + kind, 'text-span')
+          trackLocale(b, 'tb.' + kind, 'aria')
+          trackLocale(b, 'tb.' + kind, 'title')
+        } else {
+          var label = adapter.label !== undefined ? adapter.label : adapter.id
+          var textSpan = b.querySelector('span') as HTMLElement
+          if (textSpan !== null) textSpan.textContent = label
+          b.setAttribute('aria-label', label)
+          b.title = label
+        }
+        b.addEventListener('click', function () {
+          if (kind !== null) { toolbarAction(kind); return }
+          runAdapter(adapter, toolbarEnv())
+        })
         panel.appendChild(b)
+      }
+      for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
+        var adapter = BUILTIN_ADAPTERS[ai]
+        var kind = TOOLBAR_KIND_BY_ADAPTER[adapter.id]
+        // 有 kind 映射 → 既有 toolbarAction（i18n 文案）；无映射（如 dsh-settings）
+        // → 引擎执行（label/icon 直显；open-settings 语义锚点链）。
+        renderButton(adapter, kind !== undefined ? kind : null)
+      }
+      // 用户适配器管线：fetch host API（zod 已校验入项——客户端信任 host 层），
+      // 同 id 覆盖（重建按钮、行为按用户 act 执行），无 id 映射→引擎执行；
+      // 拉取失败/旧 DSH 无路由 → 静默（仅内置）。
+      var fetchUserAdapters = function () {
+        fetch('/quick-toolbar/api/adapters')
+          .then(function (r) { return r.json() })
+          .then(function (data: unknown) {
+            // host 返回 { ok, value: { adapters } }——客户端信任 host 校验（zod）
+            var envelope = data !== null && typeof data === 'object' ? data as { ok?: unknown; value?: unknown } : undefined
+            var rows: unknown = envelope !== undefined && envelope.ok === true && envelope.value !== null && typeof envelope.value === 'object'
+              ? (envelope.value as { adapters?: unknown }).adapters
+              : undefined
+            if (!Array.isArray(rows)) return
+            for (var ui = 0; ui < rows.length; ui++) {
+              var user = rows[ui] as AdapterDef | null
+              if (user === null || typeof user !== 'object') continue
+              var userKind = TOOLBAR_KIND_BY_ADAPTER[user.id]
+              try {
+                var old = panel.querySelector('[data-adapter-id="' + user.id.replace(/"/g, '\\"') + '"]')
+                if (old !== null && old.parentNode === panel) panel.removeChild(old)
+              } catch (_e) {}
+              renderButton(user, userKind !== undefined ? userKind : null)
+            }
+          })
+          .catch(function () {})
       }
       var ball = document.createElement('button')
       ball.type = 'button'
@@ -473,6 +566,8 @@ import { runAdapter, type ActEnv } from './engine.ts'
       setCollapsed(pinned ? false : true)
       applyPin()
       applyLocale()
+      // 用户适配器管线（v2 M1）——拉取后追加/覆盖按钮（异步，不阻塞初始渲染）
+      fetchUserAdapters()
 
       pinBtn.addEventListener('click', function () {
         pinned = !pinned
@@ -573,15 +668,24 @@ import { runAdapter, type ActEnv } from './engine.ts'
       // 本插件 apply——页面早期创建的元素/样式按壳环境兜底修正：
       // SSiD（壳）不显示悬浮快捷工具栏（按钮已集成标题栏，2026-08-29
       // 用户决策）；SHELL_CSS（隐藏插中心/侧栏原按钮）同样需补注。
-      window.addEventListener('load', function () {
-        if (win.__SSID_SHELL__ !== true) return
+      // 2026-08-30 修复：apply 可能晚于页面 load（load 监听错过 → 悬浮球
+      // 残留壳环境），兜底 = load + 每 1.5s 轮询（≤5 次）检查标志。
+      var hideIfShell = function () {
+        if (win.__SSID_SHELL__ !== true) return false
         var tb = document.getElementById(TOOLBAR_ID)
         if (tb !== null) tb.remove()
         var tbBall = document.getElementById(TOOLBAR_ID + '-ball')
         if (tbBall !== null) tbBall.remove()
         var st = document.querySelector('style[data-dsh-quick-toolbar]') as HTMLElement
         if (st !== null) st.textContent = BASE_CSS + '\n' + SHELL_CSS.join('\n')
-      })
+        return true
+      }
+      window.addEventListener('load', hideIfShell)
+      var shellTries = 0
+      var shellTimer = setInterval(function () {
+        shellTries++
+        if (hideIfShell() || shellTries >= 5) clearInterval(shellTimer)
+      }, 1500)
 
       // 会话管理 header 内嵌按钮（web 无标题栏时的入口；标题栏事件也可开）
       mountSmHeaderButton()

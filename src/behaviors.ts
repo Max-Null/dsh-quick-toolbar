@@ -61,3 +61,57 @@ export function actDispatchEvent(
 ): boolean {
   return env.dispatchEvent(new CustomEvent(event, { detail }))
 }
+
+/** 官方设置触发器锚点链（v2 调研点① 结论：DSH 面板 open 状态由 shell 私有，
+ *  公开语义入口 = sidebar.settings 槽的触发按钮——SettingsRoot.tsx onClick
+ *  setOpen(true)，footer 触发器类后缀 `_trigger`、无 aria。 */
+export const SETTINGS_ANCHORS = [
+  '[class$="_trigger"]',
+  'button[aria-label="设置"]',
+  'button[aria-label="Settings"]',
+  '[role="button"][aria-label="设置"]',
+  '[role="button"][aria-label="Settings"]',
+  'button[title="设置"]',
+  'button[title="Settings"]',
+] as const
+
+/** 设置按钮定位环境（锚点链第一条命中即点；未见则 false = 插件未装/改版防御）。 */
+export interface SettingsEnv {
+  find(selector: string): Clickable | null
+  /** 文本精确匹配（footer 触发器无 aria——语义定位优先于此）。 */
+  findByText?(texts: readonly string[]): Clickable | null
+}
+
+/** 打开官方设置面板：文本语义定位优先（footer trigger）→ 锚点链兜底。 */
+export function actOpenSettings(env: SettingsEnv): boolean {
+  if (env.findByText !== undefined) {
+    const byText = env.findByText(['设置', 'Settings'])
+    if (byText !== null && byText !== undefined && byText.disabled !== true) {
+      byText.click()
+      return true
+    }
+  }
+  for (let i = 0; i < SETTINGS_ANCHORS.length; i++) {
+    const target = env.find(SETTINGS_ANCHORS[i])
+    if (target !== null && target !== undefined && target.disabled !== true) {
+      target.click()
+      return true
+    }
+  }
+  return false
+}
+
+/** 命令执行环境（DSH master：ctx.remote.commands.execute；旧版：composer 输入模拟）。 */
+export interface CommandEnv {
+  /**
+   * 执行一条命令（name 不含前导斜杠）。
+   * @returns 是否成功触发（false = 环境不支持/定位失败，静默防御）。
+   */
+  execute(name: string): boolean
+}
+
+/** 触发 dsh-commands 文本命令（空白名防御；执行语义由环境实现——v2 调研点②）。 */
+export function actCommand(env: CommandEnv, name: string): boolean {
+  if (name === undefined || name === null || name.trim() === '') return false
+  return env.execute(name.trim())
+}

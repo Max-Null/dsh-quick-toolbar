@@ -7,6 +7,8 @@ import {
   actClick,
   actTogglePanel,
   actDispatchEvent,
+  actOpenSettings,
+  actCommand,
   type Clickable,
   type PanelLike,
   type DispatchEnv,
@@ -88,4 +90,80 @@ test('actDispatchEvent: 派发 CustomEvent 携带 detail', () => {
   }
   assert.equal(actDispatchEvent(env, 'ssid:titlebar', 'plugin-center'), true)
   assert.deepEqual(sent, [{ event: 'ssid:titlebar', detail: 'plugin-center' }])
+})
+
+test('actOpenSettings: 锚点链命中（中文 aria-local）先命中即点', () => {
+  const hits: string[] = []
+  const btn = makeClickable()
+  const env = {
+    find: (sel: string) => {
+      hits.push(sel)
+      return sel === 'button[aria-label="设置"]' ? btn : null
+    },
+  }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(btn.clicked, 1)
+  assert.equal(hits[0], '[class$="_trigger"]') // 锚点链首位 = footer trigger 类
+})
+
+test('actOpenSettings: findByText 语义定位优先（footer trigger 无 aria）', () => {
+  const byText = makeClickable()
+  const bySelector = makeClickable()
+  const env = {
+    find: (sel: string) => (sel === '[class$="_trigger"]' ? bySelector : null),
+    findByText: (texts: readonly string[]) => (texts.includes('设置') ? byText : null),
+  }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(byText.clicked, 1)
+  assert.equal(bySelector.clicked, 0)
+})
+
+test('actOpenSettings: findByText 未命中 → 锚点链兜底', () => {
+  const bySelector = makeClickable()
+  const env = {
+    find: (sel: string) => (sel === '[class$="_trigger"]' ? bySelector : null),
+    findByText: () => null,
+  }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(bySelector.clicked, 1)
+})
+
+test('actOpenSettings: 中文未命中 → 英文锚点回退命中', () => {
+  const btn = makeClickable()
+  const env = { find: (sel: string) => (sel === 'button[aria-label="Settings"]' ? btn : null) }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(btn.clicked, 1)
+})
+
+test('actOpenSettings: 全锚点未命中 → false（插件未装/改版防御）', () => {
+  const env = { find: () => null }
+  assert.equal(actOpenSettings(env), false)
+})
+
+test('actOpenSettings: 首命中但 disabled → 跳过继续后续锚点', () => {
+  const disabled = makeClickable({ disabled: true })
+  const enabled = makeClickable()
+  const env = {
+    find: (sel: string) =>
+      sel === 'button[aria-label="设置"]' ? disabled : sel === 'button[aria-label="Settings"]' ? enabled : null,
+  }
+  assert.equal(actOpenSettings(env), true)
+  assert.equal(disabled.clicked, 0)
+  assert.equal(enabled.clicked, 1)
+})
+
+test('actCommand: 正常执行（name 带前导空格 → trim）', () => {
+  let called = ''
+  const env = { execute: (name: string) => { called = name; return true } }
+  assert.equal(actCommand(env, '  sessions  '), true)
+  assert.equal(called, 'sessions')
+})
+
+test('actCommand: 空名/纯空白 → false', () => {
+  assert.equal(actCommand({ execute: () => true }, ''), false)
+  assert.equal(actCommand({ execute: () => true }, '   '), false)
+})
+
+test('actCommand: 执行器返回 false → 透传（环境不支持）', () => {
+  assert.equal(actCommand({ execute: () => false }, 'compact'), false)
 })
