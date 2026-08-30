@@ -234,6 +234,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
     var TOOLBAR_POS_KEY = 'ssid-toolbar-pos'
     var TOOLBAR_COLLAPSED_KEY = 'ssid-toolbar-collapsed'
     var TOOLBAR_PINNED_KEY = 'ssid-toolbar-pinned'
+    // 壳环境悬浮球开关（2026-08-30 用户拍板：SSiD 标题栏加开关——悬浮球默认隐藏，
+    // 标题栏「悬浮球」按钮开启（持久化）——ssid:titlebar detail='quick-toolbar-toggle'）。
+    var TOOLBAR_SHELL_VISIBLE_KEY = 'ssid-toolbar-shell-visible'
+    var shellFloatVisible = function () {
+      try { return localStorage.getItem(TOOLBAR_SHELL_VISIBLE_KEY) === '1' } catch (_e) { return false }
+    }
     var TOOLBAR_CSS = [
       // 壳 = 球↔面板一体（v1.8 morph）：收起 36px 圆、展开面板矩形，
       // width/height/left/top/border-radius 四态过渡 = 「球长宽展开成面板」，
@@ -341,9 +347,9 @@ import { runAdapter, type ActEnv } from './engine.ts'
     }
 
     function createToolbar() {
-      // 壳环境（__SSID_SHELL__）：按钮已集成标题栏，无需悬浮快捷工具栏
-      // （2026-08-29 用户决策：SSiD 中不显示；无壳 web 保留）。
-      if (win.__SSID_SHELL__ === true) return
+      // 壳环境（__SSID_SHELL__）：悬浮球默认隐藏（标题栏接管入口），
+      // 用户可从标题栏「悬浮球」按钮开启（持久化 ssid-toolbar-shell-visible）。
+      if (win.__SSID_SHELL__ === true && !shellFloatVisible()) return
       if (document.getElementById(TOOLBAR_ID) !== null) return
       var root = document.createElement('div')
       root.id = TOOLBAR_ID
@@ -672,12 +678,12 @@ import { runAdapter, type ActEnv } from './engine.ts'
       // 残留壳环境），兜底 = load + 每 1.5s 轮询（≤5 次）检查标志。
       var hideIfShell = function () {
         if (win.__SSID_SHELL__ !== true) return false
+        // 标题栏「悬浮球」开关开启 → 壳中保留悬浮球（2026-08-30 用户拍板）
+        if (shellFloatVisible()) return false
         var tb = document.getElementById(TOOLBAR_ID)
         if (tb !== null) tb.remove()
         var tbBall = document.getElementById(TOOLBAR_ID + '-ball')
         if (tbBall !== null) tbBall.remove()
-        var st = document.querySelector('style[data-dsh-quick-toolbar]') as HTMLElement
-        if (st !== null) st.textContent = BASE_CSS + '\n' + SHELL_CSS.join('\n')
         return true
       }
       window.addEventListener('load', hideIfShell)
@@ -703,6 +709,21 @@ import { runAdapter, type ActEnv } from './engine.ts'
 
       window.addEventListener('ssid:titlebar', function (event) {
         var detail = event !== null && typeof event === 'object' ? (event as CustomEvent).detail : undefined
+        // 标题栏「悬浮球」开关（2026-08-30 用户拍板）：切换壳环境浮球显示并持久化。
+        // 开启 → 创建工具栏（若被壳隐藏则重建）；关闭 → 移除元素（localStorage '0'）。
+        if (detail === 'quick-toolbar-toggle') {
+          var nextOn = !shellFloatVisible()
+          try { localStorage.setItem(TOOLBAR_SHELL_VISIBLE_KEY, nextOn ? '1' : '0') } catch (_e) {}
+          if (nextOn) {
+            createToolbar()
+          } else {
+            var tbEl = document.getElementById(TOOLBAR_ID)
+            if (tbEl !== null) tbEl.remove()
+            var tbBallEl = document.getElementById(TOOLBAR_ID + '-ball')
+            if (tbBallEl !== null) tbBallEl.remove()
+          }
+          return
+        }
         if (detail === 'session-manager') {
           clickSmOpenButton()
           return
