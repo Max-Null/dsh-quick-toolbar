@@ -531,6 +531,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       }
       for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
         var adapter = BUILTIN_ADAPTERS[ai]
+        // 目标可用性探测（2026-08-31 用户实测：插件中心被移除后悬浮球仍显示
+        // 其按钮——内置适配器是静态数据，不看插件是否在）。按钮选择器未命中
+        // = 对应插件/入口不在（或已改名）→ 不渲染聚合按钮（漏报优于误报；
+        // 需要时可右键重新以用户适配器注册）。dsh-settings 的官方设置锚点在
+        // DSH 正常时必命中。
+        try {
+          if (document.querySelector(adapter.button) === null) continue
+        } catch (_e) { continue }
         var kind = TOOLBAR_KIND_BY_ADAPTER[adapter.id]
         // 有 kind 映射 → 既有 toolbarAction（i18n 文案）；无映射（如 dsh-settings）
         // → 引擎执行（label/icon 直显；open-settings 语义锚点链）。
