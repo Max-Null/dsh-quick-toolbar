@@ -32,7 +32,7 @@
  * 「侧边栏自动诊断」同模式。
  */
 
-import { BUILTIN_ADAPTERS, builtinAdapter, type AdapterDef } from './adapters.ts'
+import { BUILTIN_ADAPTERS, builtinAdapter, adapterVisible, type AdapterDef } from './adapters.ts'
 import { runAdapter, type ActEnv } from './engine.ts'
 import { REGISTER_BRIEF } from './register-brief.ts'
 
@@ -529,21 +529,42 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         }
         return b
       }
-      for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
-        var adapter = BUILTIN_ADAPTERS[ai]
-        // 目标可用性探测（2026-08-31 用户实测：插件中心被移除后悬浮球仍显示
-        // 其按钮——内置适配器是静态数据，不看插件是否在）。按钮选择器未命中
-        // = 对应插件/入口不在（或已改名）→ 不渲染聚合按钮（漏报优于误报；
-        // 需要时可右键重新以用户适配器注册）。dsh-settings 的官方设置锚点在
-        // DSH 正常时必命中。
-        try {
-          if (document.querySelector(adapter.button) === null) continue
-        } catch (_e) { continue }
-        var kind = TOOLBAR_KIND_BY_ADAPTER[adapter.id]
-        // 有 kind 映射 → 既有 toolbarAction（i18n 文案）；无映射（如 dsh-settings）
-        // → 引擎执行（label/icon 直显；open-settings 语义锚点链）。
-        renderButton(adapter, kind !== undefined ? kind : null)
+      // 渲染入口可用性：壳环境（标题栏事件通道恒在，入口与页面 DOM 无关）
+      // 跳过探测恒渲染；无壳 web 按探测（选择器→文本兜底），延时补渲染
+      // 兜底晚挂载（better-sidebar 等的 toggleCluster 可能晚于本工具栏挂载）。
+      var ssidShellEnv = (typeof window !== 'undefined' && (window as unknown as { __SSID_SHELL__?: unknown }).__SSID_SHELL__ === true)
+      var adapterIdSelector = function (adapterId: string) {
+        return '[data-adapter-id="' + adapterId.replace(/"/g, '\\"') + '"]'
       }
+      var renderBuiltins = function () {
+        for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
+          var adapter = BUILTIN_ADAPTERS[ai]
+          if (!ssidShellEnv && !adapterVisible(adapter, document)) continue
+          try {
+            if (panel.querySelector(adapterIdSelector(adapter.id)) !== null) continue
+          } catch (_e) { /* 重复渲染去重失败则继续（无害） */ }
+          var kind = TOOLBAR_KIND_BY_ADAPTER[adapter.id]
+          // 有 kind 映射 → 既有 toolbarAction（i18n 文案）；无映射（如 dsh-settings）
+          // → 引擎执行（label/icon 直显；open-settings 语义锚点链）。
+          renderButton(adapter, kind !== undefined ? kind : null)
+        }
+        // 补渲染的按钮在 applyLocale 之后登记 → 立即应用一次（否则 span 文字空：
+        // 2026-09-02 用户截图中侧栏/底栏只剩图标无文字）。
+        applyLocale()
+      }
+      renderBuiltins()
+      // 延时兜底（2026-09-02 用户建议）：插件加载顺序不定（better-sidebar 的
+      // toggleCluster、__SSID_SHELL__ 注入都晚于本工具栏首遍渲染）——每 1s
+      // 重查未渲染项，条件满足即补渲染去重，直到全部内置就位或 60s 超时。
+      var builtinRetries = 0
+      var builtinRetryTimer = setInterval(function () {
+        if (builtinRetries++ >= 60) { clearInterval(builtinRetryTimer); return }
+        var pending = BUILTIN_ADAPTERS.some(function (a) {
+          try { return panel.querySelector(adapterIdSelector(a.id)) === null } catch (_e) { return true }
+        })
+        if (!pending) { clearInterval(builtinRetryTimer); return }
+        renderBuiltins()
+      }, 1000)
       // ── 滑动删除（v0.7.0，仅用户适配器；iOS 样式）：右键 → 行左滑露出「删除」─
       var slideCloseAll = function () {
         var rows = panel.querySelectorAll('.ssid-tb-row.ssid-tb-row-open')

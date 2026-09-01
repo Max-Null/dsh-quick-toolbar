@@ -36,6 +36,12 @@ export interface AdapterDef {
   id: string
   /** 分散按钮定位（CSS 选择器） */
   button: string
+  /**
+   * 目标按钮文本兜底（探测/定位用）：选择器依赖 CSS module 哈希类，
+   * 上层升级类名变化即失效——aria-label/textContent 是稳定语义。
+   * 提供后 adapterVisible/隐藏定位可随文本命中（任一即命中）。
+   */
+  buttonTexts?: readonly string[]
   /** 图标来源（缺省 from-button——扣取原按钮视觉） */
   icon?: IconDef
   /** 工具栏显示名（缺省扣原按钮文案） */
@@ -57,6 +63,9 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
   {
     id: 'dsh-plugin-center',
     button: '[class*="pc-headerbtn"]',
+    // 2026-09-02 实证：alpha.2 页面插件中心入口已是侧栏导航项（CSS module
+    // 哈希类，无 pc-headerbtn）——文本兜底保证悬浮球按钮不丢。
+    buttonTexts: ['插件中心', 'Plugin center'],
     icon: { source: 'from-button' },
     label: '插件中心',
     act: { kind: 'dispatch-event', event: 'ssid:titlebar', detail: 'plugin-center' },
@@ -92,8 +101,11 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
   {
     // 官方设置（v2 M1：语义锚点链——DSH 无公开 window 钩子，见 doc/设计/2026-08-30 v2 A1）。
     // button 用于展示定位（自绘入口）；面板打开经行为库 SETTINGS_ANCHORS 双 locale 点击。
+    // 2026-09-02 实证：alpha.2 设置按钮无 aria-label（仅文本，footer _trigger 类）——
+    // 文本兜底保证探测命中；打开仍走语义锚点链（[class$="_trigger"] 优先）。
     id: 'dsh-settings',
     button: 'button[aria-label="设置"], button[aria-label="Settings"]',
+    buttonTexts: ['设置', 'Settings'],
     icon: { source: 'custom', value: 'settings' },
     label: '设置',
     act: { kind: 'open-settings' },
@@ -104,4 +116,29 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
 /** 按 id 取内置适配器（去重语义：同名后续覆盖） */
 export function builtinAdapter(id: string): AdapterDef | undefined {
   return BUILTIN_ADAPTERS.find((a) => a.id === id)
+}
+
+/**
+ * 目标可用性探测：选择器命中优先；未命中且声明 buttonTexts 时按
+ * aria-label/textContent 文本命中兜底（CSS module 哈希类变化后语义文本
+ * 仍稳定）。任一命中 = 对应入口存在，悬浮球才渲染其聚合按钮。
+ * @param a - 适配器。
+ * @param root - 探测根（DOM 环境 = document；测试可注入 stub）。
+ */
+export function adapterVisible(a: AdapterDef, root: ParentNode): boolean {
+  try {
+    if (root.querySelector(a.button) !== null) return true
+  } catch { /* 选择器不合法（含未知伪类）→ 走文本兜底 */ }
+  const wants = a.buttonTexts ?? []
+  if (wants.length === 0) return false
+  const nodes = root.querySelectorAll('button, [role="button"], a')
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i] as Element
+    const label = (el.getAttribute('aria-label') ?? '').trim()
+    const text = (el.textContent ?? '').trim()
+    for (const want of wants) {
+      if (label === want || text === want) return true
+    }
+  }
+  return false
 }
