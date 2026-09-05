@@ -278,12 +278,12 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 壳 = 球↔面板一体（v1.8 morph）：收起 36px 圆、展开面板矩形，
       // width/height/left/top/border-radius 四态过渡 = 「球长宽展开成面板」，
       // 球图标钉在壳内球位，随壳移动到面板角淡出（2026-08-30 用户拍板）。
-      '#ssid-toolbar{position:fixed;z-index:9999;font-family:system-ui,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;box-sizing:border-box;width:36px;height:36px;border-radius:18px;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);box-shadow:0 4px 16px rgba(0,0,0,.3);overflow:hidden;transition:width .28s cubic-bezier(.25,.8,.25,1),height .28s cubic-bezier(.25,.8,.25,1),left .28s cubic-bezier(.25,.8,.25,1),top .28s cubic-bezier(.25,.8,.25,1),border-radius .28s cubic-bezier(.25,.8,.25,1)}',
+      '#ssid-toolbar{position:fixed;z-index:9999;font-family:system-ui,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;box-sizing:border-box;width:36px;height:36px;border-radius:18px;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);overflow:hidden;transition:width .28s cubic-bezier(.25,.8,.25,1),height .28s cubic-bezier(.25,.8,.25,1),left .28s cubic-bezier(.25,.8,.25,1),top .28s cubic-bezier(.25,.8,.25,1),border-radius .28s cubic-bezier(.25,.8,.25,1)}',
       '#ssid-toolbar *{box-sizing:border-box}',
       '#ssid-toolbar.ssid-tb-expanded{border-radius:12px}',
       // 球图标层：独立于壳（fixed 于球位、pointer-events 穿透）——morph 时
       // 图标停在原位淡出，壳从球位向面板位长开；面板位置公式保证球位 ⊂ 面板一角。
-      '#ssid-toolbar-ball{position:fixed;z-index:10000;width:36px;height:36px;margin:0;padding:0;border:0;background:transparent;box-shadow:none;appearance:none;-webkit-appearance:none;pointer-events:none;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-primary,#d8e0ea);opacity:.9;transition:opacity .18s ease}',
+      '#ssid-toolbar-ball{position:fixed;z-index:10000;width:36px;height:36px;margin:0;padding:0;border:0;background:transparent;box-shadow:none;appearance:none;-webkit-appearance:none;pointer-events:none;display:flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-primary,#d8e0ea);opacity:.9;border-radius:50%;transition:opacity .18s ease,background .18s ease}',
       '#ssid-toolbar-ball svg{width:16px;height:16px}',
       // 面板内容层：壳内自然尺寸（供壳 morph 测量）；背景视觉全在壳上
       '#ssid-toolbar .ssid-tb-panel{position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:4px;padding:6px;color:var(--dsw-alias-label-primary,#d8e0ea)}',
