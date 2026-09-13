@@ -109,6 +109,19 @@ pnpm install
 pnpm typecheck && pnpm test && pnpm build   # L1 门槛（20+ 用例）
 ```
 
+### 已知限制：改本插件不触发热更新，需重启内核（待办）
+
+SSiD 的 profile 以 `file:./vendor/dsh-quick-toolbar` 声明本插件，其 client 半因此不在 DSH 的 client modules 表里：`artifactBaseline(id)` 返回 undefined，而 HMR 的监听集正是「graph 中能提供 baseline 的行」（`packages/client/hmr/src/index.ts:128-141`，`artifactBaseline` 见 `packages/client/modules/src/index.ts:624`）。
+
+实测（2026-09-14）：改 `node_modules` 或 `vendor` 任意一份 `lib/client.js` 的内容，30 秒内无任何重载反应；同一时刻改 npm 包形式的 `dsh-chat-rail`（`0.6.1`）3 秒即重载。**后果**：改本插件的样式或逻辑后需重启内核才生效（发版/归档流程不受影响——那本就是重新部署）。
+
+**待办**：查清这是 DSH 的既定行为，还是我们的声明方式可调。
+
+- 若为既定行为 → 在 SSiD 开发手册 §7 记一条「vendor 集成的插件不吃 HMR」，并接受「改本插件要重启」；
+- 若 `file:` 依赖可换写法（例如改回 npm 包声明、vendor 只作归档源）→ 本插件即可恢复热更新。
+
+**已做的兼容**（commit `47c86ca`）：`apply` 的样式注入已改为幂等 + 内容比对，并提到防重守卫之前——一旦它被重载（插件中心禁用/启用、内核重启，或将来 HMR 覆盖到它），不会重复注入，`SHELL_CSS` 也能在壳标志晚到时补进去。
+
 ## SSID 系列
 
 SSiD 全家桶（[max-null-plugins](https://github.com/Max-Null)）的一员；SSiD 壳内与标题栏桥接协作（`__SSID_SHELL__` 分支）。
