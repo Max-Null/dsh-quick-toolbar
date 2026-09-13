@@ -242,6 +242,39 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     // 表现为「悬浮球样式全没、刷新才恢复」。用一个独立于模块 id 的稳定值：
     // 既不进别人的账，也不会随本模块的进出被清掉。
     var QT_STYLE_OWNER = 'dsh-quick-toolbar-styles'
+
+    /** 本插件两份样式的幂等键（各自代表一份 CSS 的角色名）。 */
+    var QT_BASE_STYLE_KEY = '@max-null/dsh-quick-toolbar/base'
+    var QT_TOOLBAR_STYLE_KEY = '@max-null/dsh-quick-toolbar/toolbar'
+
+    /**
+     * 注入或就地更新一个样式标签（幂等 + 内容比对）。
+     *
+     * 内容比对而非「已存在就跳过」：本模块在 HMR 重载后会重新执行，沿用旧标签会让
+     * 旧 CSS 一直占住该键，改动看着像生效了、实际仍是旧规则（chat-rail 同款实测）。
+     * 壳标志 __SSID_SHELL__ 由 main.mjs 在 dom-ready 注入、晚于 apply，SHELL_CSS
+     * 正是靠这次比对补进去。
+     */
+    function ensureStyleTag(marker: string, key: string, text: string): void {
+      var existing = document.head.querySelector('style[data-plugin-css="' + key + '"]') as HTMLStyleElement | null
+      if (existing === null) {
+        var tag = document.createElement('style')
+        tag.setAttribute(marker, '')
+        tag.setAttribute('data-plugin', QT_STYLE_OWNER)
+        tag.setAttribute('data-plugin-css', key)
+        tag.textContent = text
+        document.head.appendChild(tag)
+        return
+      }
+      if (existing.textContent !== text) existing.textContent = text
+    }
+
+    /** 本插件的两份样式（基础 + 悬浮工具栏），每次都按当前壳标志重算内容。 */
+    function ensureStyles(): void {
+      var base = BASE_CSS + (SHELL_CSS.length > 0 && win.__SSID_SHELL__ === true ? '\n' + SHELL_CSS.join('\n') : '')
+      ensureStyleTag('data-dsh-quick-toolbar', QT_BASE_STYLE_KEY, base)
+      ensureStyleTag('data-dsh-quick-toolbar-toolbar', QT_TOOLBAR_STYLE_KEY, TOOLBAR_CSS)
+    }
     var TOOLBAR_POS_KEY = 'ssid-toolbar-pos'
     var TOOLBAR_COLLAPSED_KEY = 'ssid-toolbar-collapsed'
     var TOOLBAR_PINNED_KEY = 'ssid-toolbar-pinned'
@@ -1005,6 +1038,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     }
 
     exports.apply = function (ctx: unknown) {
+      // 样式先于防重守卫注入：HMR 重载后的新 fiber 会被守卫直接挡回，注入若留在
+      // 守卫之后，改样式就永远只能靠重启内核生效（chat-rail 同款实测，2026-09-14）。
+      ensureStyles()
+
       // 防重守卫：DSH 插件热重载/重复加载时避免重复注册 ssid:titlebar
       // 监听器与重复注入 CSS——否则一次标题栏点击会触发多次处理
       // （toggle 被抵消、互斥按钮被点多次），2026-08-19 用户提示
@@ -1026,18 +1063,6 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       workspacesSvc = svcCtx.workspaces ?? null
       uiWorkspaceSvc = svcCtx.uiWorkspace ?? null
 
-      var style = document.createElement('style')
-      style.setAttribute('data-dsh-quick-toolbar', '')
-      style.setAttribute('data-plugin', QT_STYLE_OWNER)
-      style.textContent = BASE_CSS + (SHELL_CSS.length > 0 && win.__SSID_SHELL__ === true ? '\n' + SHELL_CSS.join('\n') : '')
-      document.head.appendChild(style)
-
-      // 悬浮快捷工具栏（被屏蔽/接管按钮的常驻出口）
-      var tbStyle = document.createElement('style')
-      tbStyle.setAttribute('data-dsh-quick-toolbar-toolbar', '')
-      tbStyle.setAttribute('data-plugin', QT_STYLE_OWNER)
-      tbStyle.textContent = TOOLBAR_CSS
-      document.head.appendChild(tbStyle)
       // 状态 host 化加载（手册 §7.10）：网络往返（本地 <10ms）完成后创建——
       // 球位/钉住/折叠/壳开关按持久状态渲染；壳默认隐藏（开关开启才创建）。
       loadState(function () {
@@ -1053,6 +1078,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 残留壳环境），兜底 = load + 每 1.5s 轮询（≤5 次）检查标志。
       var hideIfShell = function () {
         if (win.__SSID_SHELL__ !== true) return false
+        // 壳标志此刻才到：SHELL_CSS 需随标志补进基础样式（内容比对会就地更新）
+        ensureStyles()
         // 标题栏「悬浮球」开关开启 → 壳中保留悬浮球（2026-08-30 用户拍板）
         if (qtState.shellVisible) return false
         var tb = document.getElementById(TOOLBAR_ID)
