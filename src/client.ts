@@ -234,6 +234,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     // 提供常驻出口；可移动（拖拽 + localStorage 持久化）、可展开/收起。
     // 壳环境（SSiD）同样显示——与标题栏按钮组互为冗余，用户可自行收起。
     var TOOLBAR_ID = 'ssid-toolbar'
+    // 本插件样式标签的 data-plugin 归属标记。DSH 的 client 模块系统会把所有
+    // 「没有 data-plugin」的 <style> 认领给正在 materialize 的模块
+    // （@deepseek-ai/dsh-client-modules 的 claimStyles），HMR 重载那个模块时再按
+    // data-plugin === 模块 id 逐字匹配删除（@deepseek-ai/dsh-client-hmr 的
+    // removeOwnedStyles）——裸注入的样式因此会被别人的重载一起删掉，而元素留存，
+    // 表现为「悬浮球样式全没、刷新才恢复」。用一个独立于模块 id 的稳定值：
+    // 既不进别人的账，也不会随本模块的进出被清掉。
+    var QT_STYLE_OWNER = 'dsh-quick-toolbar-styles'
     var TOOLBAR_POS_KEY = 'ssid-toolbar-pos'
     var TOOLBAR_COLLAPSED_KEY = 'ssid-toolbar-collapsed'
     var TOOLBAR_PINNED_KEY = 'ssid-toolbar-pinned'
@@ -1020,12 +1028,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
 
       var style = document.createElement('style')
       style.setAttribute('data-dsh-quick-toolbar', '')
+      style.setAttribute('data-plugin', QT_STYLE_OWNER)
       style.textContent = BASE_CSS + (SHELL_CSS.length > 0 && win.__SSID_SHELL__ === true ? '\n' + SHELL_CSS.join('\n') : '')
       document.head.appendChild(style)
 
       // 悬浮快捷工具栏（被屏蔽/接管按钮的常驻出口）
       var tbStyle = document.createElement('style')
       tbStyle.setAttribute('data-dsh-quick-toolbar-toolbar', '')
+      tbStyle.setAttribute('data-plugin', QT_STYLE_OWNER)
       tbStyle.textContent = TOOLBAR_CSS
       document.head.appendChild(tbStyle)
       // 状态 host 化加载（手册 §7.10）：网络往返（本地 <10ms）完成后创建——
