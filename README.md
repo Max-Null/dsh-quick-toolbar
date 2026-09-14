@@ -61,7 +61,7 @@ dsh plugin --profile web add @max-null/dsh-quick-toolbar
 - **用户适配器**：点面板 ➕ 或复制 `adapters.prompt.md` 到任意会话 → LLM 生成 `{ "adapters": [...] }` → 写入 `~/.dsh/quick-toolbar-adapters.json` → 刷新页面生效（host API 校验，非法条目丢弃并报明细）。**推荐直接走 ➕（见教程）**。
 - 定位失败/插件未装/被禁用 → 静默跳过（绝不误伤、绝不误点）。
 - **状态持久化**：位置/钉住/折叠/壳开关走 host（`/quick-toolbar/api/state` → `~/.dsh/quick-toolbar-state.json`，SSiD 开发手册 §7.10 规则）——内核动态端口不再丢状态。
-- **收藏会话**（v0.9.0）：面板顶部的 ☆ 一键收藏/取消收藏**当前会话**；已收藏的会话平铺在功能按钮之上，**点一下即切过去**（`sessions.open`）。作用域 = 当前工作区（按会话 `cwd` 判定），**每个工作区上限 8 个**——满时 ☆ 置灰并在悬停提示说明。会话被删除后其入口自动消失；当前会话本身不占入口。持久化同样是 host 文件（`~/.dsh/quick-toolbar-favorites.json`），换机器/重启内核都还在。
+- **收藏会话**（v0.9.0）：面板顶部的 ☆ 一键收藏/取消收藏**当前会话**；已收藏的会话平铺在功能按钮之上，**点一下即切过去**（`sessions.open`）。作用域 = **与当前会话同属一个工作区**的收藏——判据是工作区的成员表（`WorkspaceView.sessionIds`，与 DSH 左侧栏的分组同一来源），不是会话的 `cwd`；未归入任何工作区的会话自成一组。**每个工作区上限 8 个**——满时 ☆ 置灰并在悬停提示说明。会话被删除后其入口自动消失；当前会话本身不占入口。持久化同样是 host 文件（`~/.dsh/quick-toolbar-favorites.json`），换机器/重启内核都还在。
 
 ## 教程：迁移 / 新增一个按钮（开一个会话，让 LLM 来做）
 

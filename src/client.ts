@@ -42,7 +42,7 @@ import {
   FAVORITE_LIMIT,
   addFavorite,
   favoriteLabel,
-  favoritesForCwd,
+  favoritesForWorkspace,
   normalizeFavorites,
   removeFavorite,
   type FavoriteSession,
@@ -169,8 +169,38 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       }
     }
 
-    /** 当前会话的 id / 工作目录 / 显示名；无当前会话或服务不可用 → null。 */
-    function currentSession(): { id: string, cwd: string, title: string } | null {
+    /**
+     * 会话所属工作区 id（`WorkspaceView.workspaceId`）。
+     *
+     * 判据取自工作区的成员表，而不是会话的 cwd —— 与 DSH 自己的分组一致
+     * （`ui-workspace/src/client/tree.ts` 的 `owningGroupKey` 用
+     * `workspace.sessionIds.includes(sessionId)` 反查）。未归入任何工作区 → 空串
+     * （DSH 的 `UNGROUPED_KEY`）。
+     */
+    function workspaceOf(sessionId: string): string {
+      var svc = workspacesSvc
+      if (svc === null || svc.list === undefined || svc.list === null) return ''
+      if (typeof svc.list.getSnapshot !== 'function') return ''
+      var snap: { items?: Array<{ workspaceId?: string, sessionIds?: string[] }> } | null = null
+      try {
+        snap = svc.list.getSnapshot() ?? null
+      } catch (_e) {
+        // 工作区快照在启动早期可能尚未接好；本次按未分组算，会话列表下次变化会重渲
+        return ''
+      }
+      if (snap === null) return ''
+      var items = snap.items !== undefined && snap.items !== null ? snap.items : []
+      for (var wi = 0; wi < items.length; wi++) {
+        var ws = items[wi]
+        var ids = ws.sessionIds
+        if (ids === undefined || ids === null) continue
+        if (ids.indexOf(sessionId) !== -1) return typeof ws.workspaceId === 'string' ? ws.workspaceId : ''
+      }
+      return ''
+    }
+
+    /** 当前会话的 id / 所属工作区 / 工作目录 / 显示名；无当前会话或服务不可用 → null。 */
+    function currentSession(): { id: string, workspaceId: string, cwd: string, title: string } | null {
       var snap = sessionsSnapshot()
       if (snap === null) return null
       var id = typeof snap.current === 'string' ? snap.current : ''
@@ -179,7 +209,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       var row = byId[id]
       var title = row !== undefined && typeof row.displayTitle === 'string' && row.displayTitle !== '' ? row.displayTitle : id
       var cwd = row !== undefined && typeof row.cwd === 'string' ? row.cwd : ''
-      return { id: id, cwd: cwd, title: title }
+      return { id: id, workspaceId: workspaceOf(id), cwd: cwd, title: title }
     }
 
     /** 会话在列表里仍存在（被删除的收藏不渲染入口，点了会 fail loud）。 */
@@ -221,13 +251,19 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       if (cur === null) return false
       // 闭包里引用会丢掉窄化，先取成局部常量（下方 some 回调用 curId）
       var curId = cur.id
-      var mine = favoritesForCwd(favList, cur.cwd)
+      var mine = favoritesForWorkspace(favList, cur.workspaceId)
       if (favList.some(function (f) { return f.id === curId })) {
         saveFavorites(removeFavorite(favList, curId))
         return true
       }
       if (mine.length >= FAVORITE_LIMIT) return false
-      var added = addFavorite(favList, { id: curId, title: cur.title, cwd: cur.cwd, at: Date.now() })
+      var added = addFavorite(favList, {
+        id: curId,
+        title: cur.title,
+        workspaceId: cur.workspaceId,
+        cwd: cur.cwd,
+        at: Date.now(),
+      })
       if (!added.ok) return false
       saveFavorites(added.list)
       return true
@@ -668,12 +704,13 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           return
         }
         favBox.setAttribute('data-fav-state', 'ok')
+        favBox.setAttribute('data-fav-ws', cur.workspaceId === '' ? '(ungrouped)' : cur.workspaceId)
         // 闭包里引用丢窄化，先取局部常量
         var curId = cur.id
         var snap = sessionsSnapshot()
         var byId = snap !== null && snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
         // 被删除的收藏不渲染入口（open 对未知 id 会 fail loud）
-        var mine = favoritesForCwd(favList, cur.cwd).filter(function (f) { return byId[f.id] !== undefined })
+        var mine = favoritesForWorkspace(favList, cur.workspaceId).filter(function (f) { return byId[f.id] !== undefined })
         var isFav = mine.some(function (f) { return f.id === curId })
         var full = !isFav && mine.length >= FAVORITE_LIMIT
         var star = document.createElement('button')
@@ -1233,7 +1270,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     /** 收藏区重渲钩子（createToolbar 挂载；语言变化时由 MutationObserver 触发）。 */
     var favRender: (() => void) | null = null
     var workspacesSvc: {
-      list?: { getSnapshot?: () => { items?: Array<{ workspaceId?: string }> } }
+      list?: { getSnapshot?: () => { items?: Array<{ workspaceId?: string, sessionIds?: string[] }> } }
     } | null = null
     var uiWorkspaceSvc: {
       connectWorkspace?: (workspaceId: string) => Promise<string>

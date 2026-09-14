@@ -2,9 +2,19 @@
  * @max-null/dsh-quick-toolbar — 收藏会话（纯逻辑，client/host 两半共用）。
  *
  * 收藏 = 用户把常去的会话钉进悬浮球，点一下即切过去（`sessions.open`）。
- * 作用域按 **cwd**（会话的工作目录）划分：悬浮球里只列当前工作区的收藏，
- * 上限也按工作区计——与 DSH 左侧栏的工作区心智一致。
+ * 作用域按 **工作区归属** 划分：悬浮球里只列「与当前会话同属一个工作区」的收藏，
+ * 上限也按工作区计。
+ *
+ * 判据是 `WorkspaceView.workspaceId`，不是会话的 `cwd`。DSH 的「工作区」是注册过的
+ * 项目目录（`~/.dsh/storages/workspace.json` 的 `workspaces` 表，每行带 `sessionIds`），
+ * 归属靠 `sessionIds.includes(sessionId)` 反查——`ui-workspace/tree.ts` 的
+ * `owningGroupKey` 就是这么做的。会话的 `cwd` 只是它自己的工作目录，两者不是一回事
+ * （同一工作区下可以有多个 cwd，且 cwd 可能缺失），拿它当分组键会让不同工作区的收藏
+ * 混在一起（2026-09-14 用户实测反馈）。
  */
+
+/** 会话不属于任何工作区时的分组键，与 DSH 的 `UNGROUPED_KEY` 同值。 */
+export const UNGROUPED_KEY = ''
 
 /** 一条收藏。 */
 export interface FavoriteSession {
@@ -12,7 +22,9 @@ export interface FavoriteSession {
   id: string
   /** 收藏当时的显示名（`SessionSummary.displayTitle` 的快照，列表读不到时兜底显示）。 */
   title: string
-  /** 会话的工作目录，作为「同一工作区」的判据；无 cwd 的会话记空串。 */
+  /** 归属工作区 id（`WorkspaceView.workspaceId`）；空串 = 未归入任何工作区。 */
+  workspaceId: string
+  /** 收藏当时的工作目录。**不参与分组**，只作展示与排查线索。 */
   cwd: string
   /** 收藏时间戳（毫秒）；列表按它倒序，新收藏的排在前面。 */
   at: number
@@ -56,6 +68,7 @@ export function normalizeFavorites(raw: unknown): FavoriteSession[] {
     out.push({
       id,
       title,
+      workspaceId: typeof r.workspaceId === 'string' ? r.workspaceId : UNGROUPED_KEY,
       cwd: typeof r.cwd === 'string' ? r.cwd : '',
       at: typeof r.at === 'number' && Number.isFinite(r.at) ? r.at : 0,
     })
@@ -66,11 +79,14 @@ export function normalizeFavorites(raw: unknown): FavoriteSession[] {
 /**
  * 取某个工作区的收藏（悬浮球实际展示的那一份）。
  * @param list - 全量收藏。
- * @param cwd - 当前会话的工作目录；`undefined` 与空串等价（无 cwd 的会话归一组）。
+ * @param workspaceId - 当前会话所属工作区 id；`undefined` 与空串等价（都表示未分组）。
  */
-export function favoritesForCwd(list: readonly FavoriteSession[], cwd: string | undefined): FavoriteSession[] {
-  const key = cwd === undefined ? '' : cwd
-  return list.filter((f) => f.cwd === key)
+export function favoritesForWorkspace(
+  list: readonly FavoriteSession[],
+  workspaceId: string | undefined,
+): FavoriteSession[] {
+  const key = workspaceId === undefined ? UNGROUPED_KEY : workspaceId
+  return list.filter((f) => f.workspaceId === key)
 }
 
 /** 新增收藏的结果。`reason` 仅在 `ok: false` 时有值。 */
@@ -88,7 +104,9 @@ export interface AddFavoriteResult {
  */
 export function addFavorite(list: readonly FavoriteSession[], item: FavoriteSession): AddFavoriteResult {
   if (list.some((f) => f.id === item.id)) return { ok: false, list: [...list], reason: 'duplicate' }
-  if (favoritesForCwd(list, item.cwd).length >= FAVORITE_LIMIT) return { ok: false, list: [...list], reason: 'limit' }
+  if (favoritesForWorkspace(list, item.workspaceId).length >= FAVORITE_LIMIT) {
+    return { ok: false, list: [...list], reason: 'limit' }
+  }
   const next = [item, ...list].sort((a, b) => b.at - a.at)
   return { ok: true, list: next }
 }
