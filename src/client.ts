@@ -840,7 +840,17 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         if (adapter.hide !== false) {
           try {
             var origBtn = document.querySelector(adapter.button) as HTMLElement | null
-            if (origBtn !== null) origBtn.style.display = 'none'
+            if (origBtn !== null) {
+              origBtn.style.display = 'none'
+              // 包装层：插件常把入口按钮包一层容器（实测 ds-harness-remote 是
+              // `div.dshRemoteSidebarEntry > button.dshRemoteModeButton`）。只隐藏
+              // 按钮会留下一个仍占位的空容器（实测 34px 高、看得见的空隙）；仅当
+              // 该祖先除本按钮外没有其他子元素时才一并隐藏，避免误伤正常容器。
+              var wrapper = origBtn.parentElement
+              if (wrapper !== null && wrapper !== document.body && wrapper.children.length === 1) {
+                wrapper.style.display = 'none'
+              }
+            }
           } catch (_e) {}
         }
         return b
@@ -925,7 +935,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
               // 恢复原按钮显示（渲染时被缺省 hide 隐藏）——删除 = 换位置的反向操作
               try {
                 var orig = document.querySelector(ad.button) as HTMLElement | null
-                if (orig !== null) orig.style.display = ''
+                if (orig !== null) {
+                  orig.style.display = ''
+                  // 与隐藏时同一判据：还原那个只装着本按钮的包装层
+                  var origWrapper = orig.parentElement
+                  if (origWrapper !== null && origWrapper !== document.body && origWrapper.children.length === 1) {
+                    origWrapper.style.display = ''
+                  }
+                }
               } catch (_e2) {}
             })
           })
