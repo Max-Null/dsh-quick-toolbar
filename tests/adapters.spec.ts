@@ -52,7 +52,14 @@ function fakeRoot(overrides: {
   nodes?: Array<{ label?: string | null; text?: string }>
 }): ParentNode {
   return {
-    querySelector: (sel: string) => (overrides.selectorHit !== undefined && sel === overrides.selectorHit ? { tag: 'X' } : null),
+    // 真实 querySelector 接受逗号分隔的多选择器；这里两种写法都认：
+    // 整串相等（既有用例的写法）与「命中其中任一子选择器」（v0.19.0 适配器的写法）。
+    querySelector: (sel: string) => {
+      const hit = overrides.selectorHit
+      if (hit === undefined) return null
+      if (sel === hit) return { tag: 'X' }
+      return String(sel).split(',').map((s) => s.trim()).includes(hit) ? { tag: 'X' } : null
+    },
     querySelectorAll: () => (overrides.nodes ?? []).map((n) => ({
       getAttribute: (name: string) => (name === 'aria-label' ? (n.label ?? null) : null),
       textContent: n.text ?? '',
@@ -87,4 +94,35 @@ test('adapterVisible: 两者皆不中 → false（入口确实不在）', () => 
     ),
     false,
   )
+})
+
+// ── v0.19.0 锚点迁移：better-sidebar 的右列归 DSH 原生右侧栏 ─────────────
+// 旧的 `[class*="toggleCluster"]` 开关簇已随「退役自绘右侧面板」移除，
+// 两条适配器双双失效（2026-09-14 用户报告「按钮位置变了、需要重新适配」）。
+
+test('adapterVisible: 侧栏适配器命中官方右侧边栏的新锚点', () => {
+  const a = builtinAdapter('dsh-better-sidebar.sidebar') as AdapterDef
+  // 收起态：ui-sidebar-right 的 ExpandButton（带 data-sidebar-right-expand）
+  assert.ok(adapterVisible(a, fakeRoot({ selectorHit: 'button[data-sidebar-right-expand]' })))
+  // 展开态：会话头 utilities 槽的收起按钮——两个 locale 变体各测一次
+  assert.ok(adapterVisible(a, fakeRoot({ selectorHit: 'button[aria-label="收起右侧边栏"]' })))
+  assert.ok(adapterVisible(a, fakeRoot({ selectorHit: 'button[aria-label="Collapse right sidebar"]' })))
+  // 文本兜底：CSS module 哈希变化后仍命中
+  assert.ok(adapterVisible(a, fakeRoot({ nodes: [{ label: '打开右侧边栏', text: '' }] })))
+})
+
+test('adapterVisible: 底栏适配器改用 better-sidebar 自绘开关（toggleCluster 已移除）', () => {
+  const a = builtinAdapter('dsh-better-sidebar.bottom') as AdapterDef
+  // 两路选择器：CSS module 原始段（哈希前缀无关）+ locale 文案
+  assert.ok(adapterVisible(a, fakeRoot({ selectorHit: 'button[class*="nArs4W_toggleButton"]' })))
+  assert.ok(adapterVisible(a, fakeRoot({ selectorHit: 'button[aria-label="展开底部面板"]' })))
+  assert.ok(adapterVisible(a, fakeRoot({ selectorHit: 'button[aria-label="折叠底部面板"]' })))
+  // 文本兜底
+  assert.ok(adapterVisible(a, fakeRoot({ nodes: [{ label: '折叠底部面板', text: '' }] })))
+})
+
+test('防回退：没有内置适配器仍指向已移除的 toggleCluster', () => {
+  for (const a of BUILTIN_ADAPTERS) {
+    assert.equal(a.button.includes('toggleCluster'), false, `${a.id} 仍指向已移除的 toggleCluster`)
+  }
 })

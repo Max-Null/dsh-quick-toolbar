@@ -73,18 +73,31 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
   },
   {
     id: 'dsh-better-sidebar.sidebar',
-    button: '[class*="toggleCluster"]',
+    // v0.19.0 起 better-sidebar 不再自绘右侧面板：右列就是 DSH 原生右侧栏，
+    // 旧的 `[class*="toggleCluster"]` 开关簇随之移除。2026-09-14 在 dev 实测：
+    // 开合由常驻的按钮承担（类名 `P3OORG_iconButton`，aria-label「收起右侧边栏」，
+    // 开、合两态都存在且位置不变）；`[data-sidebar-right-expand]` 本版未渲染，
+    // 留作跨版本子句、当前不命中。
+    button: 'button[data-sidebar-right-expand], button[aria-label="收起右侧边栏"], button[aria-label="Collapse right sidebar"]',
+    buttonTexts: ['打开右侧边栏', '收起右侧边栏', 'Open right sidebar', 'Collapse right sidebar'],
     // custom 图标（与 better-sidebar 官方 toggle 同款）：from-button 抓取
     // 会拿到 Cluster 第一个 svg（底栏按钮的 PanelBottom），侧栏/底栏同图
     // ——2026-08-31 用户反馈「侧栏图标错了」实证后改确定性内建图标。
     icon: { source: 'custom', value: 'sidebar' },
     label: '侧栏',
     act: { kind: 'dispatch-event', event: 'ssid:titlebar', detail: 'sidebar' },
-    hide: true,
+    // 官方会话头按钮**不隐藏**（用户 2026-09-14 拍板）——本入口作为并列入口。
+    hide: false,
   },
   {
     id: 'dsh-better-sidebar.bottom',
-    button: '[class*="toggleCluster"]',
+    // 底栏仍是 better-sidebar 自绘的工作台（面板容器 `nArs4W_bottomPanel`）。
+    // 2026-09-14 在 dev 实测：开关按钮**不带** `nArs4W_toggleButton` 类，只有
+    // aria-label（本版中文恒为「折叠底部面板」，开、合两态同文案）；类名子句
+    // 留作跨版本兜底、当前不命中。
+    button: 'button[class*="nArs4W_toggleButton"], button[aria-label="展开底部面板"], '
+      + 'button[aria-label="折叠底部面板"]',
+    buttonTexts: ['展开底部面板', '折叠底部面板', 'Expand bottom panel', 'Collapse bottom panel'],
     icon: { source: 'custom', value: 'bottom' },
     label: '底栏',
     act: { kind: 'dispatch-event', event: 'ssid:titlebar', detail: 'bottom' },
