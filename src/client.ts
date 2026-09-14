@@ -597,16 +597,23 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         return b
       }
       // 渲染入口可用性：壳环境（标题栏事件通道恒在，入口与页面 DOM 无关）
-      // 跳过探测恒渲染；无壳 web 按探测（选择器→文本兜底），延时补渲染
-      // 兜底晚挂载（better-sidebar 等的 toggleCluster 可能晚于本工具栏挂载）。
-      var ssidShellEnv = (typeof window !== 'undefined' && (window as unknown as { __SSID_SHELL__?: unknown }).__SSID_SHELL__ === true)
+      // 跳过探测恒渲染；无壳 web 按探测（选择器→文本兜底）。
+      //
+      // 壳标志必须**每次读取**，不能求值一次：main.mjs 在 dom-ready 才注入
+      // `__SSID_SHELL__`，晚于本插件 apply —— 快照版永远拿到 false，「壳环境恒渲染」
+      // 的兜底形同虚设；而探测路径下 `dsh-plugin-center` 必失败（原按钮被 BASE_CSS
+      // 隐藏、文本兜底也匹配不到侧栏导航项）→ 该按钮在壳里永不渲染（2026-09-14 实测
+      // 壳里面板只有 4 个内置）。函数化后，下面的 1s 补渲染轮询会在标志到达后补上。
+      var isShellEnv = function () {
+        return typeof window !== 'undefined' && (window as unknown as { __SSID_SHELL__?: unknown }).__SSID_SHELL__ === true
+      }
       var adapterIdSelector = function (adapterId: string) {
         return '[data-adapter-id="' + adapterId.replace(/"/g, '\\"') + '"]'
       }
       var renderBuiltins = function () {
         for (var ai = 0; ai < BUILTIN_ADAPTERS.length; ai++) {
           var adapter = BUILTIN_ADAPTERS[ai]
-          if (!ssidShellEnv && !adapterVisible(adapter, document)) continue
+          if (!isShellEnv() && !adapterVisible(adapter, document)) continue
           try {
             if (panel.querySelector(adapterIdSelector(adapter.id)) !== null) continue
           } catch (_e) { /* 重复渲染去重失败则继续（无害） */ }
