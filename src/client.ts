@@ -212,10 +212,16 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       return { id: id, workspaceId: workspaceOf(id), cwd: cwd, title: title }
     }
 
-    /** 会话在列表里仍存在（被删除的收藏不渲染入口，点了会 fail loud）。 */
-    function sessionExists(id: string): boolean {
+    /**
+     * 会话是否仍然存在。已删除的收藏既不渲染入口（点了会 fail loud），也不占用
+     * 该工作区的 8 个名额——两处都走这个判定。
+     *
+     * 列表快照不可用时返回 `true`：宁可把条目当作有效，也不要因为服务还没就绪就
+     * 把用户的收藏整批判成失效（那会同时隐藏入口、又让上限忽大忽小）。
+     */
+    function sessionAlive(id: string): boolean {
       var snap = sessionsSnapshot()
-      if (snap === null) return false
+      if (snap === null) return true
       var byId = snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
       return byId[id] !== undefined
     }
@@ -251,7 +257,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       if (cur === null) return false
       // 闭包里引用会丢掉窄化，先取成局部常量（下方 some 回调用 curId）
       var curId = cur.id
-      var mine = favoritesForWorkspace(favList, cur.workspaceId)
+      var mine = favoritesForWorkspace(favList, cur.workspaceId, sessionAlive)
       if (favList.some(function (f) { return f.id === curId })) {
         saveFavorites(removeFavorite(favList, curId))
         return true
@@ -263,7 +269,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         workspaceId: cur.workspaceId,
         cwd: cur.cwd,
         at: Date.now(),
-      })
+      }, sessionAlive)
       if (!added.ok) return false
       saveFavorites(added.list)
       return true
@@ -713,8 +719,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         var curId = cur.id
         var snap = sessionsSnapshot()
         var byId = snap !== null && snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
-        // 被删除的收藏不渲染入口（open 对未知 id 会 fail loud）
-        var mine = favoritesForWorkspace(favList, cur.workspaceId).filter(function (f) { return byId[f.id] !== undefined })
+        // 已删除的收藏不渲染入口、也不占上限名额（同一个 sessionAlive 判定）
+        var mine = favoritesForWorkspace(favList, cur.workspaceId, sessionAlive)
         var isFav = mine.some(function (f) { return f.id === curId })
         var full = !isFav && mine.length >= FAVORITE_LIMIT
         var star = document.createElement('button')

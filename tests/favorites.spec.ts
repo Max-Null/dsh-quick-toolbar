@@ -117,6 +117,25 @@ test('addFavorite: 上限按工作区独立计（A 满不影响 B）', () => {
   assert.equal(favoritesForWorkspace(r.list, 'ws-A').length, FAVORITE_LIMIT)
 })
 
+test('addFavorite: 失效（已删除）的收藏不占上限名额', () => {
+  // 2026-09-14 用户指出：删掉会话后它的收藏仍占着 8 个位置，于是再也加不进新的。
+  const list = Array.from({ length: FAVORITE_LIMIT }, (_, i) => fav('dead' + String(i), 'ws-alpha', i))
+  list.push(fav('alive-1', 'ws-alpha', 100))
+  const isAlive = (id: string) => !id.startsWith('dead')
+  // 给了存活判定：实际只有 1 条有效 → 允许新增
+  assert.equal(addFavorite(list, fav('new', 'ws-alpha', 999), isAlive).ok, true)
+  // 对照（旧语义）：不传判定时 9 条全计入 → 被 limit 拒绝，证明这条测试确实在校验该参数
+  assert.equal(addFavorite(list, fav('new', 'ws-alpha', 999)).ok, false)
+})
+
+test('favoritesForWorkspace: isAlive 排除失效条目；省略该参则全部计入', () => {
+  const list = [fav('a', 'ws-alpha', 3), fav('dead', 'ws-alpha', 2), fav('b', 'ws-beta', 1)]
+  const isAlive = (id: string) => id !== 'dead'
+  assert.deepEqual(favoritesForWorkspace(list, 'ws-alpha', isAlive).map((f) => f.id), ['a'])
+  assert.deepEqual(favoritesForWorkspace(list, 'ws-alpha').map((f) => f.id), ['a', 'dead'])
+  assert.deepEqual(favoritesForWorkspace(list, 'ws-beta', isAlive).map((f) => f.id), ['b'])
+})
+
 test('addFavorite/removeFavorite: 返回新数组，不改原数组', () => {
   const before = [fav('a', 'H:\\ws', 1)]
   const added = addFavorite(before, fav('b', 'H:\\ws', 2))

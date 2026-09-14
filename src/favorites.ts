@@ -80,13 +80,16 @@ export function normalizeFavorites(raw: unknown): FavoriteSession[] {
  * 取某个工作区的收藏（悬浮球实际展示的那一份）。
  * @param list - 全量收藏。
  * @param workspaceId - 当前会话所属工作区 id；`undefined` 与空串等价（都表示未分组）。
+ * @param isAlive - 会话是否仍然存在的判定；给出时失效条目会被排除。
+ *   上限计数与展示都用它，这样**已删除会话的收藏不显示、也不占用名额**。
  */
 export function favoritesForWorkspace(
   list: readonly FavoriteSession[],
   workspaceId: string | undefined,
+  isAlive?: (id: string) => boolean,
 ): FavoriteSession[] {
   const key = workspaceId === undefined ? UNGROUPED_KEY : workspaceId
-  return list.filter((f) => f.workspaceId === key)
+  return list.filter((f) => f.workspaceId === key && (isAlive === undefined || isAlive(f.id)))
 }
 
 /** 新增收藏的结果。`reason` 仅在 `ok: false` 时有值。 */
@@ -97,14 +100,20 @@ export interface AddFavoriteResult {
 }
 
 /**
- * 新增一条收藏（列表已含同 id → duplicate；该 cwd 已达上限 → limit）。
+ * 新增一条收藏（列表已含同 id → duplicate；该工作区已达上限 → limit）。
  * 返回**新数组**，调用方负责持久化。
  * @param list - 全量收藏。
  * @param item - 待收藏的会话（`at` 由调用方给，便于测试注入固定时钟）。
+ * @param isAlive - 会话是否仍然存在的判定，透传给上限计数——**失效条目不该占名额**
+ *   （2026-09-14 用户指出：删掉会话后它的收藏仍占着 8 个位置）。省略则一律计入。
  */
-export function addFavorite(list: readonly FavoriteSession[], item: FavoriteSession): AddFavoriteResult {
+export function addFavorite(
+  list: readonly FavoriteSession[],
+  item: FavoriteSession,
+  isAlive?: (id: string) => boolean,
+): AddFavoriteResult {
   if (list.some((f) => f.id === item.id)) return { ok: false, list: [...list], reason: 'duplicate' }
-  if (favoritesForWorkspace(list, item.workspaceId).length >= FAVORITE_LIMIT) {
+  if (favoritesForWorkspace(list, item.workspaceId, isAlive).length >= FAVORITE_LIMIT) {
     return { ok: false, list: [...list], reason: 'limit' }
   }
   const next = [item, ...list].sort((a, b) => b.at - a.at)
