@@ -61,6 +61,7 @@ dsh plugin --profile web add @max-null/dsh-quick-toolbar
 - **用户适配器**：点面板 ➕ 或复制 `adapters.prompt.md` 到任意会话 → LLM 生成 `{ "adapters": [...] }` → 写入 `~/.dsh/quick-toolbar-adapters.json` → 刷新页面生效（host API 校验，非法条目丢弃并报明细）。**推荐直接走 ➕（见教程）**。
 - 定位失败/插件未装/被禁用 → 静默跳过（绝不误伤、绝不误点）。
 - **状态持久化**：位置/钉住/折叠/壳开关走 host（`/quick-toolbar/api/state` → `~/.dsh/quick-toolbar-state.json`，SSiD 开发手册 §7.10 规则）——内核动态端口不再丢状态。
+- **收藏会话**（v0.9.0）：面板顶部的 ☆ 一键收藏/取消收藏**当前会话**；已收藏的会话平铺在功能按钮之上，**点一下即切过去**（`sessions.open`）。作用域 = 当前工作区（按会话 `cwd` 判定），**每个工作区上限 8 个**——满时 ☆ 置灰并在悬停提示说明。会话被删除后其入口自动消失；当前会话本身不占入口。持久化同样是 host 文件（`~/.dsh/quick-toolbar-favorites.json`），换机器/重启内核都还在。
 
 ## 教程：迁移 / 新增一个按钮（开一个会话，让 LLM 来做）
 
@@ -108,6 +109,14 @@ LLM 注册完就无需在场；那份 JSON 可导出、可备份、可随环境�
 pnpm install
 pnpm typecheck && pnpm test && pnpm build   # L1 门槛（20+ 用例）
 ```
+
+### 构建：两个入口必须分别构建（共享模块会被拆 chunk，DSH 加载器不认）
+
+`tsdown.config.ts` 用的是**数组配置**（两次独立构建），而不是一个 `entry: ['src/index.ts', 'src/client.ts']`。原因：client 半与 host 半共享的模块（如 `src/favorites.ts`）在多入口单次构建下会被提成 `favorites-<hash>.js` 共享 chunk，`lib/client.js` 顶部随之多出一条 `import ... from './favorites-<hash>.js'`；而 DSH 的 client 模块加载器按**单文件**取 `/plugins/<pkg>/client.js`（合并 bundle 的 `??pkg/client.js,...` 协议不会去拉那个相对 chunk），于是**整个 client 半静默失效**——2026-09-14 实测现象是工具栏连同所有功能按钮一起消失、页面无报错，而 host 路由仍正常响应（很容易误判成服务端问题）。
+
+同步 vendor 时同理：产物不保证就是固定两个文件，要**整目录镜像**并清掉不再产出的旧 hash 文件，别只复制 `client.js`/`index.js`。
+
+另外 host 半用 `platform: 'node'`（对其本来语义正确），该组合下 ESM 默认输出 `.mjs`，已用 `outExtensions` 钉死 `.js` 以匹配 `package.json` 的 `main`/`exports`。
 
 ### 已知限制：改本插件不触发热更新，需重启内核（待办）
 

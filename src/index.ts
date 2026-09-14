@@ -11,6 +11,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { parseUserAdapters } from './schema.ts'
+import { extractFavorites, normalizeFavorites, type FavoriteSession } from './favorites.ts'
 
 export const name = '@max-null/dsh-quick-toolbar'
 
@@ -151,6 +152,67 @@ const stateRouteDefinition = {
   },
 }
 
+// ── 收藏会话（v0.9.0）：与 state/adapters 同款 host 化——悬浮球里列出的收藏
+//    会话必须跨重启存活（动态端口下页面 localStorage 按 origin 隔离，必丢）。
+//    全量替换写回：客户端在内存里维护全量列表（含其他工作区条目），改完整体 PUT，
+//    避免「按 id 增量」在多窗口/多标签下互相覆盖。 ──
+const FAVORITES_PATH = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'quick-toolbar-favorites.json')
+const FAVORITES_ROUTE = '/quick-toolbar/api/favorites'
+
+const favoritesRouteDefinition = {
+  kind: 'exact',
+  path: FAVORITES_ROUTE,
+  handler: async (
+    req: { method?: string; on?: (e: string, cb: (chunk: string) => void) => void },
+    res: { writeHead: (n: number, h: Record<string, string>) => void; end: (s: string) => void },
+  ): Promise<void> => {
+    if (req.method === 'GET') {
+      let raw: string | null = null
+      try {
+        raw = readFileSync(FAVORITES_PATH, 'utf8')
+      } catch {
+        // 文件不存在 = 还没收藏过（合法）：返回空列表而非错误
+        sendJson(res, 200, { ok: true, value: { favorites: [] as FavoriteSession[] } })
+        return
+      }
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        sendJson(res, 200, { ok: false, error: 'invalid-json' })
+        return
+      }
+      sendJson(res, 200, { ok: true, value: { favorites: normalizeFavorites(extractFavorites(parsed)) } })
+      return
+    }
+    if (req.method === 'POST') {
+      let raw = ''
+      req.on?.('data', (chunk: string) => { raw += chunk })
+      await new Promise<void>((resolve) => req.on?.('end', () => { resolve() }))
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        sendJson(res, 200, { ok: false, error: 'invalid-json' })
+        return
+      }
+      // 入参形态：{ favorites: [...] } 或裸数组（两者都收，归一化结果一致）
+      const favorites = normalizeFavorites(extractFavorites(parsed))
+      try {
+        const tmp = FAVORITES_PATH + '.tmp'
+        writeFileSync(tmp, JSON.stringify({ favorites }, null, 2), 'utf8')
+        renameSync(tmp, FAVORITES_PATH)
+      } catch {
+        sendJson(res, 200, { ok: false, error: 'write-failed' })
+        return
+      }
+      sendJson(res, 200, { ok: true, value: { favorites } })
+      return
+    }
+    sendJson(res, 405, { ok: false, error: 'method-not-allowed' })
+  },
+}
+
 // ── 探查通道（v0.7.7）：DSH web 认证 = 根 URL 一次性 token（首访 → mint cookie →
 //    303 重定向回干净 /，之后 cookie 认证）。client 半拿不到 token（browser-auth
 //    HttpOnly+SameSite=Strict；client connection 面无 authenticatedUrl——只有 host
@@ -191,6 +253,7 @@ function apply(ctx: { inject: (deps: string[], fn: (c: never) => void) => void }
     wsSvc = wsCtx
     wsCtx.webServer.register(adaptersRouteDefinition)
     wsCtx.webServer.register(stateRouteDefinition)
+    wsCtx.webServer.register(favoritesRouteDefinition)
     wsCtx.webServer.register(authUrlRouteDefinition)
   }) as never)
 }

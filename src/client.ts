@@ -38,6 +38,15 @@
 
 import { BUILTIN_ADAPTERS, builtinAdapter, adapterVisible, type AdapterDef } from './adapters.ts'
 import { runAdapter, type ActEnv } from './engine.ts'
+import {
+  FAVORITE_LIMIT,
+  addFavorite,
+  favoriteLabel,
+  favoritesForCwd,
+  normalizeFavorites,
+  removeFavorite,
+  type FavoriteSession,
+} from './favorites.ts'
 import { REGISTER_BRIEF } from './register-brief.ts'
 
 (window as unknown as { __ModuleLoader__: { load: (definition: unknown) => unknown } }).__ModuleLoader__.load({
@@ -132,6 +141,110 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       if (button !== null && button !== undefined && !button.disabled) button.click()
     }
 
+    // ── 收藏会话（v0.9.0）：把常去的会话钉进悬浮球，点一下 `sessions.open` 切过去。
+    //    作用域按 cwd 划分（只列当前工作区的收藏），上限 FAVORITE_LIMIT/工作区。
+    //    持久化走 host 文件（动态端口下 localStorage 跨重启必丢，手册 §7 #10）。 ──
+
+    /** i18n 取词。收藏区每次重渲都重建按钮，故**不走 `trackLocale`**
+     *  （那会把失效元素累积进 LOCALE_TARGETS）；改为渲染时按当前语言直取。 */
+    function favText(key: string): string {
+      var pair = LOCALE_DICT[key]
+      if (pair === undefined) return key
+      return pair[localeIsZh() ? 0 : 1]
+    }
+
+    /** 会话列表快照（服务缺失或未就绪 → null）。 */
+    function sessionsSnapshot(): {
+      current?: string
+      byId?: Record<string, { id?: string, title?: string, displayTitle?: string, cwd?: string, running?: boolean }>
+    } | null {
+      var svc = sessionsSvc
+      if (svc === null || svc.list === undefined || svc.list === null) return null
+      if (typeof svc.list.getSnapshot !== 'function') return null
+      try {
+        return svc.list.getSnapshot() ?? null
+      } catch (_e) {
+        // 列表服务在启动早期可能尚未接好快照；本次渲染跳过，订阅回调会再来
+        return null
+      }
+    }
+
+    /** 当前会话的 id / 工作目录 / 显示名；无当前会话或服务不可用 → null。 */
+    function currentSession(): { id: string, cwd: string, title: string } | null {
+      var snap = sessionsSnapshot()
+      if (snap === null) return null
+      var id = typeof snap.current === 'string' ? snap.current : ''
+      if (id === '') return null
+      var byId = snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
+      var row = byId[id]
+      var title = row !== undefined && typeof row.displayTitle === 'string' && row.displayTitle !== '' ? row.displayTitle : id
+      var cwd = row !== undefined && typeof row.cwd === 'string' ? row.cwd : ''
+      return { id: id, cwd: cwd, title: title }
+    }
+
+    /** 会话在列表里仍存在（被删除的收藏不渲染入口，点了会 fail loud）。 */
+    function sessionExists(id: string): boolean {
+      var snap = sessionsSnapshot()
+      if (snap === null) return false
+      var byId = snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
+      return byId[id] !== undefined
+    }
+
+    /** 读收藏（host 文件；读不到就是空列表，不打断工具栏渲染）。 */
+    function loadFavorites(done: () => void): void {
+      fetch('/quick-toolbar/api/favorites')
+        .then(function (r) { return r.json() })
+        .then(function (d) {
+          var ok = d !== null && typeof d === 'object' && (d as { ok?: unknown }).ok === true
+          var value = ok ? (d as { value?: { favorites?: unknown } }).value : undefined
+          var rows = value !== undefined && value !== null ? value.favorites : []
+          favList = normalizeFavorites(rows)
+          done()
+        })
+        .catch(function () { done() })
+    }
+
+    /** 写回收藏（全量替换——客户端持有全量，包含其他工作区的条目）。
+     *  先更新内存再发请求：界面即时响应，写失败由下一次操作整体重写。 */
+    function saveFavorites(next: FavoriteSession[]): void {
+      favList = next
+      fetch('/quick-toolbar/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorites: next }),
+      }).catch(function () {})
+    }
+
+    /** 收藏/取消收藏当前会话。返回是否发生了变化（供调用方决定是否重渲）。 */
+    function toggleCurrentFavorite(): boolean {
+      var cur = currentSession()
+      if (cur === null) return false
+      // 闭包里引用会丢掉窄化，先取成局部常量（下方 some 回调用 curId）
+      var curId = cur.id
+      var mine = favoritesForCwd(favList, cur.cwd)
+      if (favList.some(function (f) { return f.id === curId })) {
+        saveFavorites(removeFavorite(favList, curId))
+        return true
+      }
+      if (mine.length >= FAVORITE_LIMIT) return false
+      var added = addFavorite(favList, { id: curId, title: cur.title, cwd: cur.cwd, at: Date.now() })
+      if (!added.ok) return false
+      saveFavorites(added.list)
+      return true
+    }
+
+    /** 切到某个收藏的会话。 */
+    function openFavorite(id: string): void {
+      var svc = sessionsSvc
+      if (svc === null || typeof svc.open !== 'function') return
+      try {
+        svc.open(id)
+      } catch (_e) {
+        // 会话在列表里消失后 open 会 fail loud；入口已在渲染期过滤掉这种情况，
+        // 这里的兜底只为「渲染后、点击前刚好被删」的窄窗口
+      }
+    }
+
     /**
      * 反向互斥（2026-08-19 用户补充）：打开插件中心前，若侧栏/底栏
      * 开着则先收起，避免弹窗被面板遮挡。两个独立判断：右栏+底栏同时
@@ -164,6 +277,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       'tb.addAria': ['添加/迁移按钮（让 LLM 来注册）', 'Add / migrate a button (let the LLM register it)'],
       'sm.open': ['会话管理', 'Sessions'],
       'sm.openTitle': ['打开会话管理面板', 'Open session manager'],
+      'fav.add': ['收藏当前会话', 'Favorite current session'],
+      'fav.remove': ['取消收藏', 'Unfavorite'],
+      'fav.full': ['收藏已满（每工作区 8 个）', 'Favorites full (8 per workspace)'],
+      'fav.open': ['打开会话', 'Open session'],
     }
     function applyLocale() {
       var zh = localeIsZh()
@@ -377,6 +494,15 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '.ssid-tb-row .ssid-tb-btn{flex:1 1 auto;min-width:0;position:relative;z-index:1;box-sizing:border-box;background:transparent}',
       '.ssid-tb-row.ssid-tb-row-open .ssid-tb-slide{transform:translateX(-56px)}',
       '.ssid-tb-del{position:absolute;right:-56px;top:0;bottom:0;width:56px;border:0;background:var(--dsw-alias-state-error-primary,#e5484d);color:#fff;font-size:12px;cursor:pointer;font-weight:500;border-radius:8px 0 0 8px}',
+      // 收藏会话区：与功能按钮同列（用户 2026-09-14 选的「平铺」形态）；容器是
+      // 面板直接子元素，已吃到面板的入场动画，内部按钮需自带一份。
+      '#ssid-toolbar .ssid-tb-favs{display:flex;flex-direction:column;gap:4px}',
+      '#ssid-toolbar .ssid-tb-favs>*{opacity:0;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease}',
+      '#ssid-toolbar.ssid-tb-expanded .ssid-tb-favs>*{opacity:1;transform:none}',
+      // 会话入口与「☆ 收藏」用业务色，和下面灰调的宿主功能按钮区分开
+      '#ssid-toolbar .ssid-tb-fav svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
+      '#ssid-toolbar .ssid-tb-favstar[data-on="1"] svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
+      '#ssid-toolbar .ssid-tb-favstar[data-full="1"]{opacity:.45;cursor:not-allowed}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -391,6 +517,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 2.2l4 4-2.6 1.4-1.8 1.8.4 2.6-1.4 1.4-2.6-3L3.9 13l-1-1 3-3.9-3-2.6 1.4-1.4 2.6.4 1.8-1.8z"/></svg>',
         settings: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/></svg>',
         add: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>',
+        // 收藏（Lucide star；尺寸由 CSS 的 15px 规则决定，viewBox 沿用 24 格原版）
+        star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+        starOn: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+        chat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.6 8.4c0 2.5-2.5 4.5-5.6 4.5-.6 0-1.2-.08-1.7-.23L3 14.2l1.05-2.5C3.1 10.8 2.4 9.68 2.4 8.4c0-2.5 2.5-4.5 5.6-4.5s5.6 2 5.6 4.5z"/></svg>',
       }
       return ICONS[name] || ICONS.grid
     }
@@ -513,6 +643,78 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       trackLocale(pinBtn, 'tb.pin', 'title')
       head.appendChild(pinBtn)
       panel.appendChild(head)
+      // ── 收藏会话区（v0.9.0）：☆ 收藏当前会话 + 已收藏会话的跳转入口，平铺在
+      //    功能按钮之上。整区每次重建（收藏集与会话列表都会变），故不走 trackLocale。
+      var favBox = document.createElement('div')
+      favBox.className = 'ssid-tb-favs'
+      panel.appendChild(favBox)
+      var renderFavs = function () {
+        // 工具栏被壳移除（关闭悬浮球开关）后订阅仍在 → 自清理，避免对着已断开的
+        // 节点反复重建（isConnected 为假即退订）
+        if (!favBox.isConnected) {
+          if (favUnsub !== null) { favUnsub(); favUnsub = null }
+          return
+        }
+        favBox.innerHTML = ''
+        // 诊断事实（排查用：为什么收藏区是空的）。放在容器上而不是控制台，
+        // 便于 CDP 直接读，也不必给每次渲染加日志。
+        favBox.setAttribute('data-fav-sub', favUnsub === null ? 'off' : 'on')
+        var cur = currentSession()
+        // 无当前会话（或会话服务尚未就绪）→ 整区不渲染，工具栏保持功能按钮原样
+        if (cur === null) {
+          if (sessionsSvc === null) favBox.setAttribute('data-fav-state', 'no-service')
+          else if (sessionsSnapshot() === null) favBox.setAttribute('data-fav-state', 'no-list')
+          else favBox.setAttribute('data-fav-state', 'no-current')
+          return
+        }
+        favBox.setAttribute('data-fav-state', 'ok')
+        // 闭包里引用丢窄化，先取局部常量
+        var curId = cur.id
+        var snap = sessionsSnapshot()
+        var byId = snap !== null && snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
+        // 被删除的收藏不渲染入口（open 对未知 id 会 fail loud）
+        var mine = favoritesForCwd(favList, cur.cwd).filter(function (f) { return byId[f.id] !== undefined })
+        var isFav = mine.some(function (f) { return f.id === curId })
+        var full = !isFav && mine.length >= FAVORITE_LIMIT
+        var star = document.createElement('button')
+        star.type = 'button'
+        star.className = 'ssid-tb-btn ssid-tb-favstar'
+        star.setAttribute('data-on', isFav ? '1' : '0')
+        if (full) star.setAttribute('data-full', '1')
+        star.innerHTML = toolbarIcon(isFav ? 'starOn' : 'star') + '<span></span>'
+        var starLabel = isFav ? favText('fav.remove') : (full ? favText('fav.full') : favText('fav.add'))
+        var starSpan = star.querySelector('span')
+        if (starSpan !== null) starSpan.textContent = starLabel
+        star.setAttribute('aria-label', starLabel)
+        star.title = starLabel
+        star.addEventListener('click', function () {
+          if (full) return
+          if (toggleCurrentFavorite()) renderFavs()
+        })
+        favBox.appendChild(star)
+        for (var fi = 0; fi < mine.length; fi++) {
+          var fav = mine[fi]
+          // 当前会话不列入（它就在眼前，入口多余）
+          if (fav.id === cur.id) continue
+          var row = byId[fav.id]
+          var liveTitle = row !== undefined && typeof row.displayTitle === 'string' && row.displayTitle !== '' ? row.displayTitle : fav.title
+          var btn = document.createElement('button')
+          btn.type = 'button'
+          btn.className = 'ssid-tb-btn ssid-tb-fav'
+          btn.setAttribute('data-adapter-id', 'dsh-favorites.open:' + fav.id)
+          btn.innerHTML = toolbarIcon('chat') + '<span></span>'
+          var label = favoriteLabel(liveTitle)
+          var span = btn.querySelector('span')
+          if (span !== null) span.textContent = label
+          btn.setAttribute('aria-label', favText('fav.open') + '：' + liveTitle)
+          btn.title = liveTitle
+          // 闭包捕获该条 id（循环变量是 var，必须用 IIFE 固定）
+          btn.addEventListener('click', (function (targetId: string) {
+            return function () { openFavorite(targetId) }
+          })(fav.id))
+          favBox.appendChild(btn)
+        }
+      }
       // 工具栏按钮集 = 内置适配器集 + 用户适配器管线（v2 M1：host API 拉取 →
       // 同 id 覆盖内置行为、无 id 映射的条目走适配器引擎执行；kind 映射的内置
       // 走既有 toolbarAction——老按钮零回归）。
@@ -786,6 +988,22 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       document.body.appendChild(root)
       document.body.appendChild(ball)
 
+      // 收藏区的首帧渲染与订阅必须等**工具栏挂上文档之后**：`renderFavs` 在容器
+      // 未连上文档时会走自清理分支（工具栏被壳移除时退订），挂载前调用等于把刚
+      // 建立的订阅当场退掉——2026-09-14 实测表现为 favBox 属性全空、收藏区恒为空。
+      if (favUnsub !== null) { favUnsub(); favUnsub = null }
+      var subSvc = sessionsSvc
+      if (subSvc !== null && subSvc.list !== undefined && subSvc.list !== null && typeof subSvc.list.subscribe === 'function') {
+        try {
+          favUnsub = subSvc.list.subscribe(renderFavs)
+        } catch (_e) {
+          // 订阅失败只影响实时刷新，首帧仍由下面的 renderFavs() 渲染
+          favUnsub = null
+        }
+      }
+      renderFavs()
+      favRender = renderFavs
+
       // ---- 球↔面板 morph（v1.9）：壳 = root，唯一锚点 = 球位（收起态左上角）----
       // 收起：36x36 圆；展开：面板位置公式保证「球位 ⊂ 面板一角」（球就是面板
       // 的角，不再斜对角相切）——球图标独立 fixed 层停在原位淡出，壳长宽展开。
@@ -992,14 +1210,28 @@ import { REGISTER_BRIEF } from './register-brief.ts'
 
     // 会话/工作区服务引用（apply 时按 inject 声明注入；字段与插件中心
     // LlmSessionsSvc/LlmWorkspacesSvc/LlmUiWorkspaceSvc 结构对齐，只声明用到的）。
+    // 收藏会话用到 `list.getSnapshot().current/cwd` 与 `list.subscribe`（会话列表
+    // 一变就重渲收藏区，用户切会话后入口立刻跟着换）。
     var sessionsSvc: {
-      list?: { getSnapshot?: () => { byId?: Record<string, { id?: string, title?: string, displayTitle?: string, running?: boolean }> } }
+      list?: {
+        getSnapshot?: () => {
+          current?: string
+          byId?: Record<string, { id?: string, title?: string, displayTitle?: string, cwd?: string, running?: boolean }>
+        }
+        subscribe?: (fn: () => void) => () => void
+      }
       open?: (id: string) => void
       binding?: (id: string) => { session?: {
         prompt?: (content: Array<{ type: 'text', text: string }>, mode: 'queue' | 'steer') => Promise<{ ok?: boolean, error?: { message?: string } }>
         rename?: (title: string) => Promise<unknown>
       } } | undefined
     } | null = null
+    /** 收藏会话全量（跨工作区；悬浮球只展示当前工作区那一份——`favoritesForCwd`）。 */
+    var favList: FavoriteSession[] = []
+    /** 会话列表订阅的退订句柄（工具栏重建时先退订，避免重复回调）。 */
+    var favUnsub: (() => void) | null = null
+    /** 收藏区重渲钩子（createToolbar 挂载；语言变化时由 MutationObserver 触发）。 */
+    var favRender: (() => void) | null = null
     var workspacesSvc: {
       list?: { getSnapshot?: () => { items?: Array<{ workspaceId?: string }> } }
     } | null = null
@@ -1100,7 +1332,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 球位/钉住/折叠/壳开关按持久状态渲染；壳默认隐藏（开关开启才创建）。
       loadState(function () {
         if (win.__SSID_SHELL__ === true && !qtState.shellVisible) return
-        createToolbar()
+        // 收藏读回后再建工具栏：否则首帧先渲染出空收藏区、读回后整区跳一下
+        loadFavorites(function () { createToolbar() })
       })
 
       // 壳标志（win.__SSID_SHELL__）由 main.mjs 在 dom-ready 注入，晚于
@@ -1133,7 +1366,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
 
       // i18n：DSH 异步设置 documentElement.lang（初始可能为静态 en），
       // 监听到变化即刷新工具栏/内嵌按钮文案
-      new MutationObserver(function () { applyLocale() }).observe(document.documentElement, {
+      new MutationObserver(function () {
+        applyLocale()
+        // 收藏区每次重建、不走 trackLocale，语言变化需自己重渲一次
+        if (favRender !== null) favRender()
+      }).observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['lang'],
       })
