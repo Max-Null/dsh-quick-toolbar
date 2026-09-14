@@ -88,14 +88,52 @@ export interface SettingsEnv {
   find(selector: string): Clickable | null
   /** 文本精确匹配（footer 触发器无 aria——语义定位优先于此）。 */
   findByText?(texts: readonly string[]): Clickable | null
+  /** 延迟调度（缺省 setTimeout；测试注入即时执行以断言深链结果）。 */
+  schedule?(fn: () => void, ms: number): void
+}
+
+/** 打开设置后、点击目标分区前的等待：设置页是 React 渲染，开关同帧拿不到导航项。 */
+export const SETTINGS_DEEPLINK_DELAY_MS = 350
+
+/**
+ * 定位并点击设置页里的一个分区（`open-settings` 的 `path` 深链）。
+ *
+ * `path` 两种都收：先当 CSS 选择器，未命中再当**文本精确匹配**。实践上文本是
+ * 更稳的那一侧——设置页导航项是 `BUTTON` + CSS module 哈希类（实测
+ * `VOzbGW_navCell` / `VOzbGW_navLabel`），类名随上游改版即失效，而分区名
+ * （「手机访问」「通用设置」…）是产品语义。
+ * @param env - 定位环境。
+ * @param path - 分区选择器或分区名。
+ * @returns 是否点到了目标。
+ */
+export function clickSettingsPath(env: SettingsEnv, path: string): boolean {
+  const bySelector = env.find(path)
+  if (bySelector !== null && bySelector !== undefined) {
+    bySelector.click()
+    return true
+  }
+  if (env.findByText !== undefined) {
+    const byText = env.findByText([path])
+    if (byText !== null && byText !== undefined) {
+      byText.click()
+      return true
+    }
+  }
+  return false
 }
 
 /** 打开/关闭官方设置面板：开着（mask 存在）→ 关闭（close 按钮 → mask 兜底）；
- *  关着 → 文本语义定位优先（footer trigger）→ 锚点链兜底。 */
-export function actOpenSettings(env: SettingsEnv): boolean {
-  // 再点关闭路径（原生 trigger 只开不关——2026-08-30 用户实测）
+ *  关着 → 文本语义定位优先（footer trigger）→ 锚点链兜底。
+ *
+ *  带 `path` 时语义不同（v2 深链）：目标是「到达某个设置分区」，不是开关面板 ——
+ *  面板已开则直接跳分区（不关闭），未开则打开后延迟一拍再跳。 */
+export function actOpenSettings(env: SettingsEnv, path?: string): boolean {
   const mask = env.find(SETTINGS_MASK_SELECTOR)
-  if (mask !== null && mask !== undefined) {
+  const panelOpen = mask !== null && mask !== undefined
+
+  if (panelOpen) {
+    if (path !== undefined) return clickSettingsPath(env, path)
+    // 再点关闭路径（原生 trigger 只开不关——2026-08-30 用户实测）
     for (let i = 0; i < SETTINGS_CLOSE_ANCHORS.length; i++) {
       const closeBtn = env.find(SETTINGS_CLOSE_ANCHORS[i])
       if (closeBtn !== null && closeBtn !== undefined && closeBtn.disabled !== true) {
@@ -106,21 +144,33 @@ export function actOpenSettings(env: SettingsEnv): boolean {
     mask.click()
     return true
   }
+
+  let opened = false
   if (env.findByText !== undefined) {
     const byText = env.findByText(['设置', 'Settings'])
     if (byText !== null && byText !== undefined && byText.disabled !== true) {
       byText.click()
-      return true
+      opened = true
     }
   }
-  for (let i = 0; i < SETTINGS_ANCHORS.length; i++) {
-    const target = env.find(SETTINGS_ANCHORS[i])
-    if (target !== null && target !== undefined && target.disabled !== true) {
-      target.click()
-      return true
+  if (!opened) {
+    for (let i = 0; i < SETTINGS_ANCHORS.length; i++) {
+      const target = env.find(SETTINGS_ANCHORS[i])
+      if (target !== null && target !== undefined && target.disabled !== true) {
+        target.click()
+        opened = true
+        break
+      }
     }
   }
-  return false
+  if (!opened) return false
+
+  if (path !== undefined) {
+    const target = path
+    const schedule = env.schedule ?? ((fn: () => void, ms: number) => { setTimeout(fn, ms) })
+    schedule(() => { clickSettingsPath(env, target) }, SETTINGS_DEEPLINK_DELAY_MS)
+  }
+  return true
 }
 
 /** 命令执行环境（DSH master：ctx.remote.commands.execute；旧版：composer 输入模拟）。 */

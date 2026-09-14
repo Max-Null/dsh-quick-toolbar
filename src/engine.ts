@@ -103,13 +103,12 @@ export function runAdapter(adapter: AdapterDef, env: ActEnv): boolean {
     case 'open-settings': {
       // v2 调研点①：DSH 无公开 window 钩子——footer trigger 文本语义优先 + 锚点链兜底。
       // adapter.button 用于自绘按钮展示定位；面板打开走行为库定位点击（按钮自身 toggle）。
-      if (act.path !== undefined) {
-        console.warn(`quick-toolbar: open-settings path '${act.path}' 暂不支持（v2 深链待入）`)
-      }
+      // path（v2 深链）：目标从「开关设置面板」变成「到达某个设置分区」——面板已开
+      // 则直接跳分区（不关闭），未开则打开后延迟一拍再跳（见 actOpenSettings）。
       return actOpenSettings({
         find: env.find,
         ...(env.findByText !== undefined ? { findByText: env.findByText } : {}),
-      })
+      }, act.path)
     }
     case 'command': {
       if (env.runCommand === undefined) {

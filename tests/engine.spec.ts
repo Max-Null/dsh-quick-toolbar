@@ -171,23 +171,47 @@ test('runAdapter: command 通道返回 false → 透传（环境不支持）', (
   assert.equal(runAdapter({ ...adapter, act: { kind: 'command', name: 'compact' } }, env), false)
 })
 
-test('runAdapter: open-settings path 暂不支持 → 警告 + 仍执行锚点链', () => {
-  let clicked = 0
+test('runAdapter: open-settings 带 path → 面板已开时直接跳分区，不关闭面板', () => {
+  // v2 深链：带 path 时目标从「开关面板」变成「到达某个分区」——所以面板开着
+  // 不该走关闭路径，而应直接点目标导航项（文本优先，CSS module 类名会变）。
+  const actions: string[] = []
+  const env = makeEnv({
+    find: (sel) => {
+      if (sel === '[class$="_mask"]') {
+        return { click: () => { actions.push('mask') }, disabled: false } as unknown as HTMLElement
+      }
+      return null
+    },
+    findByText: (texts) => texts[0] === '手机访问'
+      ? ({ click: () => { actions.push('nav:手机访问') }, disabled: false } as unknown as HTMLElement)
+      : null,
+  })
+  const adapter = builtinAdapter('dsh-settings')!
+  assert.equal(runAdapter({ ...adapter, act: { kind: 'open-settings', path: '手机访问' } }, env), true)
+  assert.deepEqual(actions, ['nav:手机访问'])
+})
+
+test('runAdapter: open-settings 带 path → 面板关着时先打开面板（深链延后一拍）', () => {
+  let opened = 0
   const env = makeEnv({
     find: (sel) =>
       sel === 'button[aria-label="设置"]'
-        ? ({ click: () => { clicked++ }, disabled: false } as unknown as HTMLElement)
+        ? ({ click: () => { opened++ }, disabled: false } as unknown as HTMLElement)
         : null,
   })
-  const warn = console.warn
-  let warned = 0
-  console.warn = () => { warned++ }
-  try {
-    const adapter = builtinAdapter('dsh-settings')!
-    assert.equal(runAdapter({ ...adapter, act: { kind: 'open-settings', path: 'llm' } }, env), true)
-    assert.equal(warned, 1)
-    assert.equal(clicked, 1)
-  } finally {
-    console.warn = warn
-  }
+  const adapter = builtinAdapter('dsh-settings')!
+  assert.equal(runAdapter({ ...adapter, act: { kind: 'open-settings', path: '手机访问' } }, env), true)
+  assert.equal(opened, 1)
+})
+
+test('runAdapter: open-settings 不带 path → 保持 toggle 语义（面板已开则关闭）', () => {
+  let closedByMask = 0
+  const env = makeEnv({
+    find: (sel) => sel === '[class$="_mask"]'
+      ? ({ click: () => { closedByMask++ }, disabled: false } as unknown as HTMLElement)
+      : null,
+  })
+  const adapter = builtinAdapter('dsh-settings')!
+  assert.equal(runAdapter(adapter, env), true)
+  assert.equal(closedByMask, 1)
 })
