@@ -112,6 +112,31 @@ export const BUILTIN_ADAPTERS: readonly AdapterDef[] = [
     hide: true,
   },
   {
+    // ds-harness-remote 的左下角入口（2026-09-21 实测：`.dshRemoteModeButton`，
+    // aria 与文本都是 Remote，外面包一层 `.dshRemoteSidebarEntry.isWide`）。
+    // 用 act: click 直接点原按钮——它自带开合；不猜面板容器，也就不会因容器
+    // 选择器随版本漂移而失效。
+    id: 'ds-harness-remote',
+    button: '.dshRemoteModeButton',
+    buttonTexts: ['Remote', '远程'],
+    icon: { source: 'from-button' },
+    label: 'Remote',
+    act: { kind: 'click' },
+    hide: true,
+  },
+  {
+    // dsh-context 的「上下文洞察」入口（2026-09-21 实测：`.lc-ov-entry`，
+    // aria 与文本都是「上下文洞察」）。同类插件在 locale 切换后文本会变，
+    // 故两种文案都登记。
+    id: 'dsh-context',
+    button: '.lc-ov-entry',
+    buttonTexts: ['上下文洞察', 'Context insight'],
+    icon: { source: 'from-button' },
+    label: '上下文洞察',
+    act: { kind: 'click' },
+    hide: true,
+  },
+  {
     // 官方设置（v2 M1：语义锚点链——DSH 无公开 window 钩子，见 doc/设计/2026-08-30 v2 A1）。
     // button 用于展示定位（自绘入口）；面板打开经行为库 SETTINGS_ANCHORS 双 locale 点击。
     // 2026-09-02 实证：alpha.2 设置按钮无 aria-label（仅文本，footer _trigger 类）——

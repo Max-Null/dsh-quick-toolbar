@@ -15,16 +15,21 @@ function validate(a: AdapterDef): void {
 }
 
 test('内置适配器集：全部结构化合法', () => {
-  assert.equal(BUILTIN_ADAPTERS.length, 5)
+  // 只守「非空」不守具体条数：条数会随适配器增减而变，写死它等于每加一个
+  // 适配器都要来改测试，而这条用例真正要证的是「每一条的结构都合法」（下面的
+  // 循环）——把「有没有」与「合不合法」分开，互不绑架。
+  assert.ok(BUILTIN_ADAPTERS.length > 0)
   for (const a of BUILTIN_ADAPTERS) validate(a)
 })
 
-test('内置适配器集：覆盖现状按钮（插件中心/侧栏/底栏/会话管理/设置）', () => {
+test('内置适配器集：覆盖现状按钮（插件中心/侧栏/底栏/会话管理/Remote/上下文洞察/设置）', () => {
   const ids = BUILTIN_ADAPTERS.map((a) => a.id)
   assert.ok(ids.includes('dsh-plugin-center'))
   assert.ok(ids.includes('dsh-better-sidebar.sidebar'))
   assert.ok(ids.includes('dsh-better-sidebar.bottom'))
   assert.ok(ids.includes('dsh-session-manager'))
+  assert.ok(ids.includes('ds-harness-remote'))
+  assert.ok(ids.includes('dsh-context'))
   assert.ok(ids.includes('dsh-settings'))
 })
 

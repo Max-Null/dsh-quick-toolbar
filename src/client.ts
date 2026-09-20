@@ -359,7 +359,14 @@ import { REGISTER_BRIEF } from './register-brief.ts'
      */
     function isSmPanelOpen() {
       var p = document.querySelector('.sm-panel') as HTMLElement
-      return p !== null && p.offsetParent !== null
+      if (p === null) return false
+      // 用 rect 而不是 offsetParent：面板挂在 position:fixed 的宿主模态下
+      // （.sm-nativeDialog），而 fixed 定位元素的 offsetParent **恒为 null**
+      // ——照它判定会永远得到「没开」，于是每次点击都再点一次 footer 按钮。
+      // 按钮在 0.5.1 是 toggle（panelStore.toggle()），于是开/关交替，
+      // 用户看到的就是「点了没反应」（2026-09-21 实测）。
+      var r = p.getBoundingClientRect()
+      return r.width > 0 && r.height > 0
     }
     function clickSmPanelClose() {
       var p = document.querySelector('.sm-panel') as HTMLElement
@@ -844,11 +851,25 @@ import { REGISTER_BRIEF } from './register-brief.ts'
               origBtn.style.display = 'none'
               // 包装层：插件常把入口按钮包一层容器（实测 ds-harness-remote 是
               // `div.dshRemoteSidebarEntry > button.dshRemoteModeButton`）。只隐藏
-              // 按钮会留下一个仍占位的空容器（实测 34px 高、看得见的空隙）；仅当
-              // 该祖先除本按钮外没有其他子元素时才一并隐藏，避免误伤正常容器。
+              // 按钮会留下一个仍占位的空容器（实测 42px 高、看得见的空隙）；仅当
+              // 该祖先除本按钮外没有其他子元素时才一并处理，避免误伤正常容器。
+              //
+              // **但绝不能用 display:none**：这类容器常是插件渲染浮层的宿主——
+              // dsh-session-manager 就把 `.sm-panel` portal 进 `.sm-footer`
+              // （DOM 链：.sm-footer > … > .sm-nativeDialog(position:fixed) >
+              // .sm-panel）。display:none 会连整棵子树一起埋掉，panel 的 rect
+              // 变成 0x0、offsetParent 为 null，屏幕上什么都没有——表现就是
+              // 「点了没反应」（2026-09-21 实测：悬浮球的「会话管理」按钮）。
+              // 改「尺寸归零 + overflow:visible」：空隙照样消掉（42px → 0），
+              // 但后代浮层照常渲染。
               var wrapper = origBtn.parentElement
               if (wrapper !== null && wrapper !== document.body && wrapper.children.length === 1) {
-                wrapper.style.display = 'none'
+                wrapper.style.minHeight = '0'
+                wrapper.style.height = '0'
+                wrapper.style.padding = '0'
+                wrapper.style.margin = '0'
+                wrapper.style.border = 'none'
+                wrapper.style.overflow = 'visible'
               }
             }
           } catch (_e) {}
