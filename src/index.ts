@@ -11,7 +11,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { parseUserAdapters } from './schema.ts'
-import { extractFavorites, normalizeFavorites, type FavoriteSession } from './favorites.ts'
+import { extractFavorites, normalizeFavorites, type FavoriteSession } from './legacy-favorites.ts'
 
 export const name = '@max-null/dsh-quick-toolbar'
 
@@ -152,64 +152,50 @@ const stateRouteDefinition = {
   },
 }
 
-// ── 收藏会话（v0.9.0）：与 state/adapters 同款 host 化——悬浮球里列出的收藏
-//    会话必须跨重启存活（动态端口下页面 localStorage 按 origin 隔离，必丢）。
-//    全量替换写回：客户端在内存里维护全量列表（含其他工作区条目），改完整体 PUT，
-//    避免「按 id 增量」在多窗口/多标签下互相覆盖。 ──
-const FAVORITES_PATH = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'quick-toolbar-favorites.json')
-const FAVORITES_ROUTE = '/quick-toolbar/api/favorites'
+// ── 旧收藏文件的一次性迁移（v0.11.0）：收藏会话已并入内核置顶，插件不再自管收藏，
+//    也不再接受写入（原来的 POST 全量替换已随功能一并退役）。
+//    这条路由只做一件事：**读一次旧文件并改名**，把内容交给 client 半去逐条
+//    调 `uiWorkspace.pinSession`。读到手就改名（`.migrated`），所以天然只做一次；
+//    原文件保留不删，人工可恢复。 ──
+const LEGACY_FAVORITES_PATH = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'quick-toolbar-favorites.json')
+const LEGACY_FAVORITES_MIGRATED_PATH = LEGACY_FAVORITES_PATH + '.migrated'
 
-const favoritesRouteDefinition = {
+const legacyFavoritesRouteDefinition = {
   kind: 'exact',
-  path: FAVORITES_ROUTE,
+  path: '/quick-toolbar/api/favorites/migrate',
   handler: async (
-    req: { method?: string; on?: (e: string, cb: (chunk: string) => void) => void },
+    req: { method?: string },
     res: { writeHead: (n: number, h: Record<string, string>) => void; end: (s: string) => void },
   ): Promise<void> => {
-    if (req.method === 'GET') {
-      let raw: string | null = null
-      try {
-        raw = readFileSync(FAVORITES_PATH, 'utf8')
-      } catch {
-        // 文件不存在 = 还没收藏过（合法）：返回空列表而非错误
-        sendJson(res, 200, { ok: true, value: { favorites: [] as FavoriteSession[] } })
-        return
-      }
-      let parsed: unknown = null
-      try {
-        parsed = JSON.parse(raw)
-      } catch {
-        sendJson(res, 200, { ok: false, error: 'invalid-json' })
-        return
-      }
-      sendJson(res, 200, { ok: true, value: { favorites: normalizeFavorites(extractFavorites(parsed)) } })
+    if (req.method !== 'GET') {
+      sendJson(res, 405, { ok: false, error: 'method-not-allowed' })
       return
     }
-    if (req.method === 'POST') {
-      let raw = ''
-      req.on?.('data', (chunk: string) => { raw += chunk })
-      await new Promise<void>((resolve) => req.on?.('end', () => { resolve() }))
-      let parsed: unknown = null
-      try {
-        parsed = JSON.parse(raw)
-      } catch {
-        sendJson(res, 200, { ok: false, error: 'invalid-json' })
-        return
-      }
-      // 入参形态：{ favorites: [...] } 或裸数组（两者都收，归一化结果一致）
-      const favorites = normalizeFavorites(extractFavorites(parsed))
-      try {
-        const tmp = FAVORITES_PATH + '.tmp'
-        writeFileSync(tmp, JSON.stringify({ favorites }, null, 2), 'utf8')
-        renameSync(tmp, FAVORITES_PATH)
-      } catch {
-        sendJson(res, 200, { ok: false, error: 'write-failed' })
-        return
-      }
-      sendJson(res, 200, { ok: true, value: { favorites } })
+    let raw: string | null = null
+    try {
+      raw = readFileSync(LEGACY_FAVORITES_PATH, 'utf8')
+    } catch {
+      // 文件不存在 = 没有可迁移的东西（已经迁过，或从未收藏过）
+      sendJson(res, 200, { ok: true, value: { favorites: [] as FavoriteSession[] } })
       return
     }
-    sendJson(res, 405, { ok: false, error: 'method-not-allowed' })
+    // 先改名再返回：改名失败就不交内容，避免迁移与改名脱节（下次再来一次
+    // 是有害的——置顶集合会被重复灌入同一条，虽然幂等，但读到的语义是错的）
+    try {
+      renameSync(LEGACY_FAVORITES_PATH, LEGACY_FAVORITES_MIGRATED_PATH)
+    } catch {
+      sendJson(res, 200, { ok: false, error: 'rename-failed' })
+      return
+    }
+    let parsed: unknown = null
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      // 已改名，内容仍在 .migrated 里，人工可恢复
+      sendJson(res, 200, { ok: false, error: 'invalid-json' })
+      return
+    }
+    sendJson(res, 200, { ok: true, value: { favorites: normalizeFavorites(extractFavorites(parsed)) } })
   },
 }
 
@@ -253,7 +239,7 @@ function apply(ctx: { inject: (deps: string[], fn: (c: never) => void) => void }
     wsSvc = wsCtx
     wsCtx.webServer.register(adaptersRouteDefinition)
     wsCtx.webServer.register(stateRouteDefinition)
-    wsCtx.webServer.register(favoritesRouteDefinition)
+    wsCtx.webServer.register(legacyFavoritesRouteDefinition)
     wsCtx.webServer.register(authUrlRouteDefinition)
   }) as never)
 }

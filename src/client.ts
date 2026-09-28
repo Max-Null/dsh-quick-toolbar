@@ -299,6 +299,29 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     }
 
     /**
+     * 旧收藏文件的一次性迁移：取回历史条目，逐条置顶。
+     *
+     * host 侧读到旧文件就把它改名成 `.migrated`，所以这条路径**天然只生效一次**，
+     * 迁移失败也不会重复灌入。失败静默——它对用户没有可见后果（工具栏照常工作），
+     * 而报错只会制造噪音；`.migrated` 文件保留着原数据，人工可恢复。
+     */
+    function migrateLegacyFavorites(): void {
+      fetch('/quick-toolbar/api/favorites/migrate')
+        .then(function (r) { return r.json() })
+        .then(function (d) {
+          if (d === null || typeof d !== 'object' || (d as { ok?: unknown }).ok !== true) return
+          var value = (d as { value?: { favorites?: unknown } }).value
+          var rows = value !== undefined && value !== null && Array.isArray(value.favorites) ? value.favorites : []
+          for (var i = 0; i < rows.length; i++) {
+            var row = rows[i] as { id?: unknown }
+            var id = row !== null && typeof row === 'object' && typeof row.id === 'string' ? row.id : ''
+            if (id !== '') setPinned(id, true)
+          }
+        })
+        .catch(function () { /* 迁移失败不影响工具栏 */ })
+    }
+
+    /**
      * 反向互斥（2026-08-19 用户补充）：打开插件中心前，若侧栏/底栏
      * 开着则先收起，避免弹窗被面板遮挡。两个独立判断：右栏+底栏同时
      * 开着时都要收起（不能用 if/else if，否则短路漏掉一个——用户实测
@@ -1548,6 +1571,9 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 状态 host 化加载（手册 §7.10）：网络往返（本地 <10ms）完成后创建——
       // 球位/钉住/折叠/壳开关按持久状态渲染；壳默认隐藏（开关开启才创建）。
       loadState(function () {
+        // 迁移与工具栏无关：壳环境下悬浮球可能不显示，但历史收藏照样该进内核置顶
+        // 集合。所以放在 return 之前，且不阻塞后续流程。
+        migrateLegacyFavorites()
         if (win.__SSID_SHELL__ === true && !qtState.shellVisible) return
         // 置顶集合来自内核的 workspaces 快照，无需预加载——工具栏直接建，
         // 首帧的置顶区由 renderFavs 自己按当前快照渲染
