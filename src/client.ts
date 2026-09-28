@@ -359,6 +359,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       'pin.empty': ['还没有置顶的会话', 'No pinned sessions yet'],
       'pin.open': ['打开会话', 'Open session'],
       'pin.failed': ['操作失败，置顶状态未变', 'Action failed, pin unchanged'],
+      'pin.nocur': ['当前没有会话', 'No current session'],
     }
     function applyLocale() {
       var zh = localeIsZh()
@@ -598,18 +599,39 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 借用它会脱离文档流，把 `.ssid-tb-pins` 高度压成 0、按钮挤成 26px 宽。
       '#ssid-toolbar .ssid-tb-pinmenu svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
       '#ssid-toolbar .ssid-tb-pintoggle[data-on="1"] svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
-      '#ssid-toolbar .ssid-tb-pingroups{display:flex;flex-direction:column;gap:6px}',
-      '#ssid-toolbar .ssid-tb-pingroup{display:flex;flex-direction:column;gap:2px}',
-      '#ssid-toolbar .ssid-tb-pinhead{font-size:11px;opacity:.6;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '#ssid-toolbar .ssid-tb-pinrow{display:flex;align-items:stretch;gap:2px}',
-      '#ssid-toolbar .ssid-tb-pinrow .ssid-tb-pinopen{flex:1 1 auto;min-width:0}',
+      // 无当前会话时 ☆ 常驻但禁用：入口位置稳定，同时说明为什么点不动
+      '#ssid-toolbar .ssid-tb-pintoggle[data-disabled="1"]{opacity:.4;cursor:default}',
+      '#ssid-toolbar .ssid-tb-pintoggle[data-disabled="1"]:hover{background:transparent}',
+      // ── 置顶会话的二级列 ────────────────────────────────────────────────────
+      // **挂在 body 上，不在壳内**：壳 `#ssid-toolbar` 有 `overflow:hidden`（球↔面板
+      // morph 的圆角裁切），壳内的绝对定位元素溢不出去，「右侧一列」会被裁成没有。
+      // 于是它自成一层，跟随入口按钮的 rect 定位（见 placePinSub）。
+      '.ssid-tb-pinsub{position:fixed;z-index:9998;box-sizing:border-box;display:flex;flex-direction:column;gap:6px;min-width:150px;max-width:260px;padding:6px;border-radius:10px;background:var(--dsw-alias-bg-layer-3,#10151f);border:1px solid var(--dsw-alias-border-l2,#1e2836);box-shadow:0 8px 24px rgba(0,0,0,.28);font-family:system-ui,"Segoe UI",sans-serif;color:var(--dsw-alias-label-primary,#d8e0ea);user-select:none;-webkit-user-select:none;opacity:0;visibility:hidden;transform:translateX(-4px);transition:opacity .14s ease,transform .14s ease,visibility .14s}',
+      '.ssid-tb-pinsub[data-open="1"]{opacity:1;visibility:visible;transform:none}',
+      '.ssid-tb-pinsub *{box-sizing:border-box}',
+      // 二级列里复用的按钮/行样式与其在壳内的定义**逐条并列**，避免复制一份：
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-btn{border:0;background:transparent;color:var(--dsw-alias-label-primary,#d8e0ea);border-radius:8px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;text-align:left}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,148,168,.14))}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-btn svg{flex:none;width:15px;height:15px;color:var(--dsw-alias-label-secondary,#98a2b3)}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pingroups{display:flex;flex-direction:column;gap:6px}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pingroup{display:flex;flex-direction:column;gap:2px}',
+      // 分组标题：与同级会话项**同一套缩进**（padding 0 10px）并带工作区图标——
+      // 此前是裸文字 `padding:0 4px`，与下方条目左边缘对不齐。
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinhead{display:flex;align-items:center;gap:8px;padding:0 10px;font-size:11px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinhead svg{flex:none;width:15px;height:15px}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow{display:flex;align-items:stretch;gap:2px}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinopen{flex:1 1 auto;min-width:0}',
       // 失效条目整行降透明，但**仍然可点** —— 取消置顶的热区必须够得着
-      '#ssid-toolbar .ssid-tb-pinrow[data-dead="1"] .ssid-tb-pinopen{opacity:.5}',
-      // 取消置顶是次要热区：平时不显形，hover / 键盘聚焦时才出来，避免误触
-      '#ssid-toolbar .ssid-tb-pinrow .ssid-tb-pinun{flex:0 0 auto;width:22px;padding:0;opacity:0;transition:opacity .12s ease}',
-      '#ssid-toolbar .ssid-tb-pinrow:hover .ssid-tb-pinun,#ssid-toolbar .ssid-tb-pinrow .ssid-tb-pinun:focus-visible{opacity:1}',
-      '#ssid-toolbar .ssid-tb-pinerr{color:var(--dsw-alias-state-error-primary,#e5484d);font-size:11px;padding:2px 4px}',
-      '#ssid-toolbar .ssid-tb-pinempty{font-size:11px;opacity:.6;padding:2px 4px}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow[data-dead="1"] .ssid-tb-pinopen{opacity:.5}',
+      // 取消置顶是次要热区：平时不显形，hover / 键盘聚焦时才出来，避免误触。
+      // 宽度 26 而非 22：图标 15px 留出左右各 5px 呼吸；`justify-content:center` 是必需的
+      // ——继承的 `.ssid-tb-btn` 是 flex 且不居中，否则图标会贴在左边缘。
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinun{flex:0 0 auto;width:26px;padding:0;justify-content:center;opacity:0;transition:opacity .12s ease}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinun svg{color:var(--dsw-alias-label-tertiary,#7b8494)}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinun:hover svg{color:var(--dsw-alias-state-error-primary,#e5484d)}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow:hover .ssid-tb-pinun,:is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinun:focus-visible{opacity:1}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinerr{color:var(--dsw-alias-state-error-primary,#e5484d);font-size:11px;padding:2px 10px}',
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinempty{font-size:11px;opacity:.6;padding:2px 10px}',
     ].join('\n')
 
     function toolbarIcon(name: string) {
@@ -632,8 +654,17 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         star: '<svg viewBox="0 -0.49 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
         starOn: '<svg viewBox="0 -0.49 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
         chat: '<svg viewBox="0 1.05 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.6 8.4c0 2.5-2.5 4.5-5.6 4.5-.6 0-1.2-.08-1.7-.23L3 14.2l1.05-2.5C3.1 10.8 2.4 9.68 2.4 8.4c0-2.5 2.5-4.5 5.6-4.5s5.6 2 5.6 4.5z"/></svg>',
+        // 置顶分组的标题图标，与侧栏工作区项同一语汇（文件夹）
+        folder: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M1.9 4.3c0-.8.6-1.4 1.4-1.4h2.7l1.4 1.6h5.3c.8 0 1.4.6 1.4 1.4v6.2c0 .8-.6 1.4-1.4 1.4H3.3c-.8 0-1.4-.6-1.4-1.4V4.3z"/></svg>',
+        // 取消置顶：实心星 + 斜杠。与 starOn 同源（同一颗星），一眼可读作「把这颗星撤掉」；
+        // 斜杠压低到 5→19 并加粗到 2，是为了 15px 下仍然清楚（细斜杠在这个尺寸会糊）。
+        starOff: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/><path d="M4.2 4.2L19.8 19.8" fill="none" stroke-width="2.2" stroke-linecap="round"/></svg>',
+        // 未知图标名的**中性占位**：一个圆点。此前兜底是 grid，于是任何拼错的图标名都会
+        // 静默变成「四格方块」——看起来像插件图标，实则是个 bug（2026-09-29 实测：
+        // 取消置顶写成不存在的 'close'，界面上就出现了「⊞」）。
+        dot: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/></svg>',
       }
-      return ICONS[name] || ICONS.grid
+      return ICONS[name] || ICONS.dot
     }
 
     // v2 M1 引擎环境：find/dispatch ← DOM；isVisible ← rect/computedStyle
@@ -763,8 +794,51 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       pinBox.className = 'ssid-tb-pins'
       panel.appendChild(pinBox)
 
-      /** 二级菜单是否展开。开合只影响渲染，故与其它一次性状态同层。 */
-      var pinMenuOpen = false
+      // 置顶会话的二级列：**独立浮层，挂 body**。壳 `#ssid-toolbar` 有
+      // `overflow:hidden`（球↔面板 morph 的圆角裁切），放在壳内做「右侧一列」会被
+      // 裁掉；挂 body 才能自由溢出，也才能不占一级菜单的高度。
+      // 开合纯靠 `data-open` 属性（CSS 过渡），**不触发重渲染** —— 重渲染会替换
+      // 节点、把 hover 打断。
+      var pinSub = document.createElement('div')
+      pinSub.className = 'ssid-tb-pinsub'
+      pinSub.setAttribute('data-open', '0')
+      pinSub.addEventListener('mouseenter', function () { setPinSubOpen(true) })
+      pinSub.addEventListener('mouseleave', function () { setPinSubOpen(false) })
+      document.body.appendChild(pinSub)
+
+      /** 二级列/入口按钮的悬停状态。任一为真即保持展开。 */
+      var pinSubHover = false
+      var pinMenuHover = false
+
+      /** 按两个悬停源刷新二级列开合（不重渲染）。 */
+      function setPinSubOpen(open: boolean): void {
+        pinSubHover = open
+        var want = pinSubHover || pinMenuHover
+        var shown = want && expanded
+        // 一级菜单收起时二级列必须跟着收：否则球回到 36px，一列置顶还挂在屏幕上
+        pinSub.setAttribute('data-open', shown ? '1' : '0')
+        var anchor = pinBox.querySelector('.ssid-tb-pinmenu')
+        if (anchor !== null) anchor.setAttribute('aria-expanded', shown ? 'true' : 'false')
+        if (shown) placePinSub()
+      }
+
+      /** 把二级列贴到「置顶会话」入口的右侧；越界时改贴左侧。 */
+      function placePinSub(): void {
+        var anchor = pinBox.querySelector('.ssid-tb-pinmenu')
+        if (anchor === null) return
+        var r = anchor.getBoundingClientRect()
+        var w = pinSub.offsetWidth
+        var h = pinSub.offsetHeight
+        var left = r.right + 6
+        if (left + w > window.innerWidth - 4) left = Math.max(4, r.left - w - 6)
+        var top = r.top
+        if (top + h > window.innerHeight - 4) top = Math.max(4, window.innerHeight - h - 4)
+        pinSub.style.left = Math.round(left) + 'px'
+        pinSub.style.top = Math.round(top) + 'px'
+      }
+
+      // 二级菜单的开合状态**不再存变量**：它由 `pinSub[data-open]` 与两个悬停源
+      // （入口按钮 / 二级列自身）共同表达，切属性不重渲染。
 
       /** 供 `groupPinned` 反查单条置顶的归属、标题与存活。 */
       function resolvePinned(id: string): { workspaceId: string, title: string, alive: boolean } | null {
@@ -784,7 +858,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         box.setAttribute('data-group-kind', group.kind)
         var head = document.createElement('div')
         head.className = 'ssid-tb-pinhead'
-        head.textContent = group.title + '（' + group.entries.length + '）'
+        // 工作区图标 + 与同级条目同一套缩进：此前是裸文字 `padding:0 4px`，
+        // 左边缘与下方会话项、上方功能按钮都对不齐（2026-09-29 用户指出）。
+        head.innerHTML = toolbarIcon('folder') + '<span></span>'
+        var headSpan = head.querySelector('span')
+        if (headSpan !== null) headSpan.textContent = group.title + '（' + group.entries.length + '）'
         head.title = group.title
         box.appendChild(head)
         for (var i = 0; i < group.entries.length; i++) {
@@ -819,7 +897,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           un.type = 'button'
           un.className = 'ssid-tb-btn ssid-tb-pinun'
           un.setAttribute('data-adapter-id', 'dsh-pinned.unpin:' + entry.id)
-          un.innerHTML = toolbarIcon('close')
+          un.innerHTML = toolbarIcon('starOff')
           un.setAttribute('aria-label', favText('pin.remove') + '：' + entry.title)
           un.title = favText('pin.remove')
           un.addEventListener('click', (function (targetId: string) {
@@ -861,49 +939,60 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           : []
         pinBox.setAttribute('data-pin-count', String(pinnedIds.length))
         var curId = cur === null ? '' : cur.id
-        // ☆：置顶 / 取消置顶当前会话（无当前会话时不渲染，与收藏时代的处置一致）
-        if (cur !== null) {
-          var on = pinnedIds.indexOf(curId) !== -1
-          var star = document.createElement('button')
-          star.type = 'button'
-          star.className = 'ssid-tb-btn ssid-tb-pintoggle'
-          star.setAttribute('data-on', on ? '1' : '0')
-          star.innerHTML = toolbarIcon(on ? 'starOn' : 'star') + '<span></span>'
-          var starLabel = on ? favText('pin.remove') : favText('pin.add')
-          var starSpan = star.querySelector('span')
-          if (starSpan !== null) starSpan.textContent = starLabel
-          star.setAttribute('aria-label', starLabel)
-          star.title = starLabel
+        // ☆：置顶 / 取消置顶当前会话。**始终渲染**——此前无当前会话时整块不出现，
+        // 用户在新会话页看不到入口，以为插件没有这个功能（2026-09-29 用户指出）。
+        // 无当前会话时禁用并写明原因，位置与形态保持稳定。
+        var on = cur !== null && pinnedIds.indexOf(curId) !== -1
+        var star = document.createElement('button')
+        star.type = 'button'
+        star.className = 'ssid-tb-btn ssid-tb-pintoggle'
+        star.setAttribute('data-on', on ? '1' : '0')
+        star.innerHTML = toolbarIcon(on ? 'starOn' : 'star') + '<span></span>'
+        var starLabel = cur === null
+          ? favText('pin.nocur')
+          : (on ? favText('pin.remove') : favText('pin.add'))
+        var starSpan = star.querySelector('span')
+        if (starSpan !== null) starSpan.textContent = starLabel
+        star.setAttribute('aria-label', starLabel)
+        star.title = starLabel
+        if (cur === null) {
+          star.disabled = true
+          star.setAttribute('data-disabled', '1')
+        } else {
           star.addEventListener('click', function () { toggleCurrentPin() })
-          pinBox.appendChild(star)
         }
+        pinBox.appendChild(star)
         // 菜单入口：按钮上带置顶数量
         var menuBtn = document.createElement('button')
         menuBtn.type = 'button'
         menuBtn.className = 'ssid-tb-btn ssid-tb-pinmenu'
-        menuBtn.setAttribute('aria-expanded', pinMenuOpen ? 'true' : 'false')
+        // aria-expanded 由 setPinSubOpen 在开合时同步（这里先落初值）
+        menuBtn.setAttribute('aria-expanded', 'false')
         menuBtn.innerHTML = toolbarIcon('chat') + '<span></span>'
         var menuLabel = favText('pin.menu') + (pinnedIds.length > 0 ? '（' + pinnedIds.length + '）' : '')
         var menuSpan = menuBtn.querySelector('span')
         if (menuSpan !== null) menuSpan.textContent = menuLabel
         menuBtn.setAttribute('aria-label', menuLabel)
         menuBtn.title = menuLabel
-        menuBtn.addEventListener('click', function () {
-          pinMenuOpen = !pinMenuOpen
-          renderFavs()
-        })
+        // 入口：**hover / 键盘聚焦**即展开二级列（用户要求，原为点击开合）。
+        // 只切属性、不重渲染 —— 重渲染会换掉节点，鼠标还停在上面 hover 就断了。
+        menuBtn.addEventListener('mouseenter', function () { pinMenuHover = true; setPinSubOpen(false) })
+        menuBtn.addEventListener('mouseleave', function () { pinMenuHover = false; setPinSubOpen(false) })
+        menuBtn.addEventListener('focus', function () { pinMenuHover = true; setPinSubOpen(false) })
+        menuBtn.addEventListener('blur', function () { pinMenuHover = false; setPinSubOpen(false) })
         pinBox.appendChild(menuBtn)
-        if (pinMenuOpen) {
-          var groups = groupPinned(pinnedIds, resolvePinned, workspaceTitleOf)
-          if (groups.length === 0) {
-            var empty = document.createElement('div')
-            empty.className = 'ssid-tb-pinempty'
-            empty.textContent = favText('pin.empty')
-            pinBox.appendChild(empty)
-          } else {
-            for (var gi = 0; gi < groups.length; gi++) pinBox.appendChild(renderPinGroup(groups[gi], curId))
-          }
+        // 二级列的内容（分组列表）：数据每次变化都重建，开合状态不受影响
+        pinSub.innerHTML = ''
+        var groups = groupPinned(pinnedIds, resolvePinned, workspaceTitleOf)
+        if (groups.length === 0) {
+          var empty = document.createElement('div')
+          empty.className = 'ssid-tb-pinempty'
+          empty.textContent = favText('pin.empty')
+          pinSub.appendChild(empty)
+        } else {
+          for (var gi = 0; gi < groups.length; gi++) pinSub.appendChild(renderPinGroup(groups[gi], curId))
         }
+        if (pinSub.getAttribute('data-open') === '1') placePinSub()
         // 失败提示：给一个可见窗口，到点自然消失（由下一次渲染清掉）
         if (pinErrorUntil > Date.now()) {
           var err = document.createElement('div')
@@ -1305,6 +1394,10 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       // 球图标固定于球位（展开淡出、收起淡回）。
       var setCollapsed = function (collapsed: boolean) {
         expanded = !collapsed
+        // 一级菜单收起时二级列必须一起收：球缩回 36px 后，一列置顶不能还挂在屏幕上。
+        // 直接落属性而不走 setPinSubOpen，是为了不抹掉悬停源状态（展开回来时若鼠标
+        // 仍在入口上，应当自动再展开）。
+        if (collapsed) pinSub.setAttribute('data-open', '0')
         ball.style.opacity = collapsed ? '' : '0'
         if (collapsed) {
           root.classList.remove('ssid-tb-expanded')
