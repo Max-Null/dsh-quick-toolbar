@@ -376,6 +376,12 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       }
     }
     function trackLocale(el: HTMLElement, key: string, attr: string) {
+      // 幂等：同一元素同一属性只保留一条，重复登记只换 key。否则状态切换会不断 push，
+      // LOCALE_TARGETS 无限增长，且新旧两条同时存在、最终显示取决于应用顺序。
+      for (var i = 0; i < LOCALE_TARGETS.length; i++) {
+        var seen = LOCALE_TARGETS[i]
+        if (seen.el === el && seen.attr === attr) { seen.key = key; return }
+      }
       LOCALE_TARGETS.push({ el: el, key: key, attr: attr })
     }
 
@@ -584,11 +590,13 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-pins{display:flex;flex-direction:column;gap:4px}',
       '#ssid-toolbar .ssid-tb-pins>*{opacity:0;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease}',
       '#ssid-toolbar.ssid-tb-expanded .ssid-tb-pins>*{opacity:1;transform:none}',
-      // 「钉住」开关与「置顶会话」入口用业务色，与灰调的宿主功能按钮区分开。
-      // 两者必须各用各的类名：`.ssid-tb-pin` 带 `position:absolute;width:26px`，
-      // 是头部右上角那个图标位的定位规则；菜单入口借用它会脱离文档流，把
-      // `.ssid-tb-pins` 的高度压成 0、按钮挤成 26px 宽（2026-09-29 实测）。
-      '#ssid-toolbar .ssid-tb-pin svg,#ssid-toolbar .ssid-tb-pinmenu svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
+      // 「置顶会话」入口用业务色，与灰调的宿主功能按钮区分开。
+      // **「钉住」开关不在此列**：它按状态变色（钉住=业务色、未钉住=灰），由 JS 写
+      // 内联 `style.color` 表达、SVG 经 `currentColor` 继承。这里若对 `.ssid-tb-pin svg`
+      // 无条件设色，会盖过那份内联值，使未钉住时也显蓝（2026-09-29 实测）。
+      // 另外，菜单入口必须自用类名：`.ssid-tb-pin` 带 `position:absolute;width:26px`，
+      // 借用它会脱离文档流，把 `.ssid-tb-pins` 高度压成 0、按钮挤成 26px 宽。
+      '#ssid-toolbar .ssid-tb-pinmenu svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
       '#ssid-toolbar .ssid-tb-pintoggle[data-on="1"] svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
       '#ssid-toolbar .ssid-tb-pingroups{display:flex;flex-direction:column;gap:6px}',
       '#ssid-toolbar .ssid-tb-pingroup{display:flex;flex-direction:column;gap:2px}',
@@ -1368,6 +1376,9 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         qtState.pinned = pinned
         saveState()
         applyPin()
+        // 状态变了要**立即应用**一次：trackLocale 只登记 key，真正写 title 的是
+        // applyLocale。不补这一句，钉住后悬停提示会一直停在「钉住」（2026-09-29 实测）。
+        applyLocale()
         setCollapsed(pinned ? false : true)
       })
       // hover 展开/收起（未钉住）——「鼠标点 + 壳膨胀区」几何统一判定：
