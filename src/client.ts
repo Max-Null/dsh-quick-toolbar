@@ -137,6 +137,20 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     //    不再有插件自管的收藏文件，也没有每工作区上限。读写分两个服务——读走
     //    `workspaces.list` 的快照，写走 `uiWorkspace`（与官方 UI 的分工一致）。 ──
 
+    /** 侧栏工作区树里会话行的 `data-row-key` 前缀（`session:<id>`）。 */
+    var SESSION_ROW_PREFIX = 'session:'
+
+    /**
+     * 首次使用自动生成的工作区目录名。
+     *
+     * 与 `api/workspace-controller/src/default-workspace.ts` 的
+     * `DEFAULT_WORKSPACE_DIRECTORY` 同值：那里是语言中立、写进磁盘路径、跨语言切换
+     * 都不变的常量，且 `workspaceDisplayTitle` 只按它判定「这个名字是自动取的」。
+     * 本地复制一份而不是跨包引用，是因为本插件的 client bundle 独立构建，
+     * 不经过 DSH 的内联白名单（`packages/client/tsdown.client.ts` 的 INLINE_SAFE）。
+     */
+    var DEFAULT_WORKSPACE_DIRECTORY = 'default-workspace'
+
     /** i18n 取词。置顶区每次重渲都重建按钮，故**不走 `trackLocale`**
      *  （那会把失效元素累积进 LOCALE_TARGETS）；改为渲染时按当前语言直取。 */
     function favText(key: string): string {
@@ -192,12 +206,37 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     }
 
     /** 当前会话的 id / 所属工作区 / 工作目录 / 显示名；无当前会话或服务不可用 → null。 */
+    /**
+     * 当前打开的会话 id（读不到 → 空串）。
+     *
+     * **不能读 `sessions.list` 快照的 `current`**：`SessionListSnapshot`
+     * （`api/session-controller/src/client/sessions/manager.ts`）只有
+     * `items / state / phase / error / projectionsBySession`，**没有 `current` 字段**，
+     * 它恒为 `undefined` —— 依赖它的结果是「置顶当前会话」永远判成没有会话，即使
+     * 正开着一条（2026-09-29 实测：页面标题已是会话名，判据仍是 no-current）。
+     *
+     * 改读侧栏工作区树里被选中的那一行。用 `aria-selected` / `role` / `data-row-key`
+     * 而不是哈希类名（`dzuBha_sessionRow`）：前三个是 DSH 维护的语义属性，不会随
+     * CSS Modules 的哈希改名而失效。
+     */
+    function currentSessionIdFromDom(): string {
+      try {
+        var row = document.querySelector('[data-slot="sidebar.workspaces"] [role="treeitem"][aria-selected="true"]')
+        if (row === null) return ''
+        var key = row.getAttribute('data-row-key')
+        if (key === null || key.indexOf(SESSION_ROW_PREFIX) !== 0) return ''
+        return key.slice(SESSION_ROW_PREFIX.length)
+      } catch (_e) {
+        // 侧栏尚未挂载（首屏早期）→ 视为没有当前会话，观察器随后会再来
+        return ''
+      }
+    }
+
     function currentSession(): { id: string, workspaceId: string, cwd: string, title: string } | null {
-      var snap = sessionsSnapshot()
-      if (snap === null) return null
-      var id = typeof snap.current === 'string' ? snap.current : ''
+      var id = currentSessionIdFromDom()
       if (id === '') return null
-      var byId = snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
+      var snap = sessionsSnapshot()
+      var byId = snap !== null && snap.byId !== undefined && snap.byId !== null ? snap.byId : {}
       var row = byId[id]
       var title = row !== undefined && typeof row.displayTitle === 'string' && row.displayTitle !== '' ? row.displayTitle : id
       var cwd = row !== undefined && typeof row.cwd === 'string' ? row.cwd : ''
@@ -228,7 +267,13 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       for (var i = 0; i < items.length; i++) {
         if (items[i].workspaceId !== workspaceId) continue
         var t = items[i].title
-        return typeof t === 'string' && t !== '' ? t : null
+        if (typeof t !== 'string' || t === '') return null
+        // 自动命名的工作区按本地化的默认名显示，与侧栏一致。存下来的 title 就是
+        // `default-workspace`（见 `DEFAULT_WORKSPACE_DIRECTORY` 处的说明），
+        // 不映射就会把裸目录名漏到界面上（2026-09-29 用户指出：侧栏是「默认工作区」，
+        // 悬浮球却是 `default-workspace`）。用户手动改过的名字原样显示。
+        if (t === DEFAULT_WORKSPACE_DIRECTORY) return favText('pin.defaultWorkspace')
+        return t
       }
       return null
     }
@@ -360,6 +405,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       'pin.open': ['打开会话', 'Open session'],
       'pin.failed': ['操作失败，置顶状态未变', 'Action failed, pin unchanged'],
       'pin.nocur': ['当前没有会话', 'No current session'],
+      // 与 DSH 自己的 `workspace.defaultName` 同文案，保证侧栏与悬浮球一致
+      'pin.defaultWorkspace': ['默认工作区', 'Default workspace'],
     }
     function applyLocale() {
       var zh = localeIsZh()
@@ -656,9 +703,9 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         chat: '<svg viewBox="0 1.05 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.6 8.4c0 2.5-2.5 4.5-5.6 4.5-.6 0-1.2-.08-1.7-.23L3 14.2l1.05-2.5C3.1 10.8 2.4 9.68 2.4 8.4c0-2.5 2.5-4.5 5.6-4.5s5.6 2 5.6 4.5z"/></svg>',
         // 置顶分组的标题图标，与侧栏工作区项同一语汇（文件夹）
         folder: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M1.9 4.3c0-.8.6-1.4 1.4-1.4h2.7l1.4 1.6h5.3c.8 0 1.4.6 1.4 1.4v6.2c0 .8-.6 1.4-1.4 1.4H3.3c-.8 0-1.4-.6-1.4-1.4V4.3z"/></svg>',
-        // 取消置顶：实心星 + 斜杠。与 starOn 同源（同一颗星），一眼可读作「把这颗星撤掉」；
-        // 斜杠压低到 5→19 并加粗到 2，是为了 15px 下仍然清楚（细斜杠在这个尺寸会糊）。
-        starOff: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/><path d="M4.2 4.2L19.8 19.8" fill="none" stroke-width="2.2" stroke-linecap="round"/></svg>',
+        // 取消置顶：图钉 + 斜杠。与「钉住」开关同一语汇（那里用的就是图钉，见 pin），
+        // 斜杠加粗到 1.8 是为了 15px 下仍然看得清（细斜杠在这个尺寸会糊成一团）。
+        pinOff: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 2.2l4 4-2.6 1.4-1.8 1.8.4 2.6-1.4 1.4-2.6-3L3.9 13l-1-1 3-3.9-3-2.6 1.4-1.4 2.6.4 1.8-1.8z"/><path d="M2.8 2.8l10.4 10.4" stroke-width="1.8"/></svg>',
         // 未知图标名的**中性占位**：一个圆点。此前兜底是 grid，于是任何拼错的图标名都会
         // 静默变成「四格方块」——看起来像插件图标，实则是个 bug（2026-09-29 实测：
         // 取消置顶写成不存在的 'close'，界面上就出现了「⊞」）。
@@ -897,7 +944,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           un.type = 'button'
           un.className = 'ssid-tb-btn ssid-tb-pinun'
           un.setAttribute('data-adapter-id', 'dsh-pinned.unpin:' + entry.id)
-          un.innerHTML = toolbarIcon('starOff')
+          un.innerHTML = toolbarIcon('pinOff')
           un.setAttribute('aria-label', favText('pin.remove') + '：' + entry.title)
           un.title = favText('pin.remove')
           un.addEventListener('click', (function (targetId: string) {
@@ -1328,6 +1375,25 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           // 同上
         }
       }
+      // 会话切换**不改变任何服务快照**：上面两个订阅都不会触发，但「当前会话」变了
+      // —— ☆ 的状态、以及二级列里「当前会话不给跳转入口」的判定都要跟着变。
+      // 于是用观察器盯侧栏工作区树的 `aria-selected`（正是 currentSessionIdFromDom
+      // 的取值来源），并 debounce 到 120ms：连点几个会话不该触发一连串重渲。
+      // 观察整棵 body 而不是侧栏子树，是因为侧栏会随工作区切换整体重建，锚在它上面
+      // 的观察器会随重建一起失效。
+      try {
+        var curObs = new MutationObserver(function () {
+          if (curObsTimer !== null) clearTimeout(curObsTimer)
+          curObsTimer = setTimeout(function () {
+            curObsTimer = null
+            renderFavs()
+          }, 120)
+        })
+        curObs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-selected'] })
+        favUnsubs.push(function () { curObs.disconnect() })
+      } catch (_e) {
+        // 观察器建不起来只影响会话切换后的即时刷新，其余功能不受影响
+      }
       renderFavs()
       favRender = renderFavs
 
@@ -1483,8 +1549,18 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       var inShellArea = function () {
         var r = root.getBoundingClientRect()
         var m = 18 // 膨胀半径：覆盖球/面板边缘与过渡帧
-        return lastMouse.x >= r.left - m && lastMouse.x <= r.right + m &&
-          lastMouse.y >= r.top - m && lastMouse.y <= r.bottom + m
+        if (lastMouse.x >= r.left - m && lastMouse.x <= r.right + m &&
+          lastMouse.y >= r.top - m && lastMouse.y <= r.bottom + m) return true
+        // 置顶会话的二级列挂在 body 上、落在壳的 rect 之外，但它仍是工具栏的一部分。
+        // 若在这里判成「在外面」，鼠标刚移进去就会排上 220ms 的收起，二级列跟着消失，
+        // 里面的条目根本点不到（2026-09-29 用户实测：移入后菜单错误收起）。
+        if (pinSub.getAttribute('data-open') === '1') {
+          var s = pinSub.getBoundingClientRect()
+          if (s.width > 0 &&
+            lastMouse.x >= s.left - m && lastMouse.x <= s.right + m &&
+            lastMouse.y >= s.top - m && lastMouse.y <= s.bottom + m) return true
+        }
+        return false
       }
       var scheduleCollapse = function () {
         if (pinned || !expanded) return
@@ -1562,6 +1638,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
     } | null = null
     /** 订阅的退订句柄（会话列表 + 工作区列表两个）；工具栏重建时先全退，避免重复回调。 */
     var favUnsubs: Array<() => void> = []
+    /** 会话切换观察器的 debounce 句柄（见订阅处的说明）。 */
+    var curObsTimer: ReturnType<typeof setTimeout> | null = null
     /** 退出全部订阅（工具栏重建、容器被移除时调用）。 */
     function releaseFavSubs(): void {
       for (var i = 0; i < favUnsubs.length; i++) {
