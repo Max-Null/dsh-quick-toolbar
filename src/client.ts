@@ -333,10 +333,18 @@ import { REGISTER_BRIEF } from './register-brief.ts'
 
     /** 切到某个置顶的会话。 */
     function openPinned(id: string): void {
-      var svc = sessionsSvc
-      if (svc === null || typeof svc.open !== 'function') return
+      // 导航属于**视图所有者**：`ISessions`（api/session-controller/src/client/contract/
+      // sessions.ts:50）的 JSDoc 明说 "navigation belongs to view owners"，它只有
+      // list / retain / using / retainInfo / create / subagentAddress / refresh*，
+      // **没有 open**。此前这里调 `sessionsSvc.open(id)`，那句守卫
+      // `typeof svc.open !== 'function'` 于是每次都直接 return —— 点置顶条目从未
+      // 跳转过（2026-09-29 用户实测「点击会话没有切过去」）。
+      // 改用 `uiWorkspace.openSession`：ui-workflow-run / ui-subagent / ui-chat
+      // 三个官方插件都走这条路。
+      var ws = uiWorkspaceSvc
+      if (ws === null || typeof ws.openSession !== 'function') return
       try {
-        svc.open(id)
+        ws.openSession(id)
       } catch (_e) {
         // 会话在列表里消失后 open 会 fail loud；入口已在渲染期过滤掉这种情况，
         // 这里的兜底只为「渲染后、点击前刚好被删」的窄窗口
@@ -405,6 +413,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       'pin.open': ['打开会话', 'Open session'],
       'pin.failed': ['操作失败，置顶状态未变', 'Action failed, pin unchanged'],
       'pin.nocur': ['当前没有会话', 'No current session'],
+      'pin.isCurrent': ['（当前会话）', ' (current session)'],
       // 与 DSH 自己的 `workspace.defaultName` 同文案，保证侧栏与悬浮球一致
       'pin.defaultWorkspace': ['默认工作区', 'Default workspace'],
     }
@@ -668,6 +677,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinhead svg{flex:none;width:15px;height:15px}',
       ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow{display:flex;align-items:stretch;gap:2px}',
       ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinopen{flex:1 1 auto;min-width:0}',
+      // 当前会话弱化表示「你正在这条上」，但仍可点（跳转对它无害）
+      ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow .ssid-tb-pinopen[data-current="1"]{opacity:.62}',
       // 失效条目整行降透明，但**仍然可点** —— 取消置顶的热区必须够得着
       ':is(#ssid-toolbar,.ssid-tb-pinsub) .ssid-tb-pinrow[data-dead="1"] .ssid-tb-pinopen{opacity:.5}',
       // 取消置顶是次要热区：平时不显形，hover / 键盘聚焦时才出来，避免误触。
@@ -927,15 +938,15 @@ import { REGISTER_BRIEF } from './register-brief.ts'
           if (span !== null) span.textContent = label
           open.setAttribute('aria-label', favText('pin.open') + '：' + entry.title)
           open.title = entry.title
-          // 当前会话不给跳转入口（它就在眼前），但**保留取消置顶** —— 否则
-          // 只能回会话列表才能取消，与「随手置顶」不对称
-          if (entry.id !== currentId) {
-            open.addEventListener('click', (function (targetId: string) {
-              return function () { openPinned(targetId) }
-            })(entry.id))
-          } else {
+          // 当前会话**同样可点**：openSession 对它无害，而禁用会让人以为坏了
+          //（禁用态彼时还没有任何视觉区分，看起来完全可点 —— 2026-09-29 用户实测
+          //  「点击会话没有切过去」，点的正是这一条）。改为标记 + 弱化，保留跳转语义。
+          open.addEventListener('click', (function (targetId: string) {
+            return function () { openPinned(targetId) }
+          })(entry.id))
+          if (entry.id === currentId) {
             open.setAttribute('data-current', '1')
-            open.disabled = true
+            open.title = entry.title + favText('pin.isCurrent')
           }
           row.appendChild(open)
           // 取消置顶：次要热区，平时不显形（hover / 聚焦才出来，避免误触）。
@@ -1662,6 +1673,8 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       connectWorkspace?: (workspaceId: string) => Promise<string>
       pinSession?: (sessionId: string) => Promise<void>
       unpinSession?: (sessionId: string) => Promise<void>
+      /** 跳到某条会话。导航归视图所有者，见 openPinned 处的说明。 */
+      openSession?: (sessionId: string) => void
     } | null = null
     // 探查通道（v0.7.7）：host 半经 connection.authenticatedUrl 拼带 token 完整
     // URL（client 拿不到 token——browser-auth 的 cookie 是 HttpOnly，client
