@@ -4,9 +4,9 @@
 
 This plugin belongs to the **`@max-null/*` family** — a set of plugins that together form the **[SSID (思灵 · Seek Soul in Darkness)](https://github.com/Max-Null/seek-soul-in-darkness)** desktop experience.
 
-面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的**插件按钮聚合器**：把三方插件散乱的按钮（插件中心/侧栏/底栏/会话管理…）聚合到统一入口——SSiD 壳 → 标题栏按钮组；DSH web → **iOS 小白点式悬浮球**（自由定位拖拽、球↔面板 morph 展开、球永远锁定面板屏幕外侧角）。**核心价值 = 可扩展性**：本插件是「载体」（协议 + 引擎 + 注册表），**每个人都可以把**自己环境里任何插件的按钮**聚合进来**（LLM 一键注册 / 右键删除 = 注册制/注销制，全程不动插件源码、不写一行代码）——不要求第三方插件配合，不需要等作者适配。面板里还带一个**收藏会话**入口：把常去的会话钉进来，按工作区分组、点一下即切过去。
+面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的**插件按钮聚合器**：把三方插件散乱的按钮（插件中心/侧栏/底栏/会话管理…）聚合到统一入口——SSiD 壳 → 标题栏按钮组；DSH web → **iOS 小白点式悬浮球**（自由定位拖拽、球↔面板 morph 展开、球永远锁定面板屏幕外侧角）。**核心价值 = 可扩展性**：本插件是「载体」（协议 + 引擎 + 注册表），**每个人都可以把**自己环境里任何插件的按钮**聚合进来**（LLM 一键注册 / 右键删除 = 注册制/注销制，全程不动插件源码、不写一行代码）——不要求第三方插件配合，不需要等作者适配。面板里还带一个**置顶会话**入口：把常回的会话钉起来，按工作区分组放在面板右侧的二级列里，点一下即切过去。
 
-A **plugin-button aggregator** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): gathers scattered third-party plugin buttons (plugin center / sidebar / bottom bar / session manager …) into one entry — an SSiD title-bar button group in the SSID shell, and an iOS assistive-touch-style floating ball on plain DSH web (free positioning & dragging, ball↔panel morph expand, ball always locked to the panel's screen-outer corner). **Extensibility is the point**: this plugin is a *carrier* (protocol + engine + registry) — **everyone can register the buttons of any plugin in their own environment** (LLM one-click registration / right-click deregistration; no plugin source touched, no code written, no cooperation required from third-party plugins). The panel also carries a **session favorites** entry: pin the sessions you keep returning to and jump to them in one click, grouped by workspace.
+A **plugin-button aggregator** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): gathers scattered third-party plugin buttons (plugin center / sidebar / bottom bar / session manager …) into one entry — an SSiD title-bar button group in the SSID shell, and an iOS assistive-touch-style floating ball on plain DSH web (free positioning & dragging, ball↔panel morph expand, ball always locked to the panel's screen-outer corner). **Extensibility is the point**: this plugin is a *carrier* (protocol + engine + registry) — **everyone can register the buttons of any plugin in their own environment** (LLM one-click registration / right-click deregistration; no plugin source touched, no code written, no cooperation required from third-party plugins). The panel also carries a **pinned-sessions** entry: pin the sessions you keep returning to; they sit in a secondary column to the right of the panel, grouped by workspace, one click away.
 
 ## 理念：载体 + 驻场 LLM——动态聚合，零代码增删
 
@@ -46,12 +46,21 @@ A **plugin-button aggregator** for [DeepSeek Harness](https://github.com/deepsee
 
 > 截图环境：SSiD 壳（标题栏/聚合面板）与 DSH web（悬浮球）；Remote 为用户 LLM 现场注册的按钮（ds-harness-remote 入口），演示「统一入口聚合散落按钮」。
 
-### 收藏会话（v0.9.0）
+### 置顶会话（v0.9 引入；v0.11 起改为右侧二级列）
 
-![悬浮球面板：收藏区在上、聚合按钮在下](docs/shots/favorites-panel.png)
+![悬浮球面板与右侧的置顶二级列](docs/shots/favorites-panel.png)
 
-> 面板顶部是「☆ 收藏当前会话」和已收藏会话的跳转入口（蓝色图标），下面才是聚合来的功能按钮（灰色）——两类入口在同一列里靠图标颜色区分。
-> 收藏按**工作区**分组：只列与当前会话同属一个工作区的收藏，每区上限 8 个；点收藏项即切过去（`sessions.open`）。会话被删除后入口消失、**且不占那 8 个名额**；归档的会话照常显示。
+> 面板顶部是「☆ 置顶当前会话」与「置顶会话（N）」入口。鼠标移到入口上，**面板右侧**展开
+> 一列独立的置顶列表——它挂在 `body` 上、不在壳内，因此**不占用一级菜单的高度**（壳带
+> `overflow:hidden`，壳内的浮层溢不出去）。分组标题带工作区图标，与会话项左对齐。
+>
+> 置顶按**工作区**分组，判据是工作区的成员表（`WorkspaceView.sessionIds`，与 DSH 左侧栏的
+> 分组同一来源），不是会话的 `cwd`；**没有数量上限**。点条目即切过去；行尾「图钉 + 斜杠」
+> 取消置顶（平时不显形，悬停或键盘聚焦才出来，避免误触）。会话被删除后条目降透明、**但仍
+> 然可点**——否则就再也取消不掉它了。
+>
+> 数据落在**内核的置顶集合**（`WorkspaceSnapshot.pinnedSessionIds`），读写分走
+> `workspaces.list` 与 `uiWorkspace`，与官方 UI 共享同一份——不是插件自管的文件。
 
 ## 安装
 
@@ -68,9 +77,12 @@ dsh plugin --profile web add @max-null/dsh-quick-toolbar
 - **用户适配器**：点面板 ➕ 或复制 `adapters.prompt.md` 到任意会话 → LLM 生成 `{ "adapters": [...] }` → 写入 `~/.dsh/quick-toolbar-adapters.json` → 刷新页面生效（host API 校验，非法条目丢弃并报明细）。**推荐直接走 ➕（见教程）**。
 - 定位失败/插件未装/被禁用 → 静默跳过（绝不误伤、绝不误点）。
 - **状态持久化**：位置/钉住/折叠/壳开关走 host（`/quick-toolbar/api/state` → `~/.dsh/quick-toolbar-state.json`，SSiD 开发手册 §7.10 规则）——内核动态端口不再丢状态。
-- **收藏会话**（v0.9.0）：面板顶部的 ☆ 一键收藏/取消收藏**当前会话**；已收藏的会话平铺在功能按钮之上，**点一下即切过去**（`sessions.open`）。作用域 = **与当前会话同属一个工作区**的收藏——判据是工作区的成员表（`WorkspaceView.sessionIds`，与 DSH 左侧栏的分组同一来源），不是会话的 `cwd`；未归入任何工作区的会话自成一组。**每个工作区上限 8 个**——满时 ☆ 置灰并在悬停提示说明。会话被删除后其入口自动消失；当前会话本身不占入口。持久化同样是 host 文件（`~/.dsh/quick-toolbar-favorites.json`），换机器/重启内核都还在。
-  - **会话被删除后**：入口不再显示，**也不占用那 8 个名额**（上限只数当前还存在的会话）。记录本身仍留在文件里，不做自动清理——「会话列表里没有」也可能只是尚未加载，自动删会丢掉用户数据；真要清就手动改 `favorites` 数组。
-  - **归档的会话**：归档只是从左侧栏分组里收起，会话本身仍然有效，所以它的收藏照常显示、照常可点。
+- **置顶会话**（v0.9 引入；v0.11 起为右侧二级列）：面板顶部的 ☆ 一键置顶/取消置顶**当前会话**——**无当前会话时该入口常驻但禁用**，并写明原因（此前它会整块消失，看起来像没有这个功能）。鼠标移到「置顶会话（N）」上，**面板右侧**展开一列置顶列表；开合只切属性、不触发重渲染，因此悬停不会被打断。作用域 = **与当前会话同属一个工作区**的置顶，判据是工作区的成员表（`WorkspaceView.sessionIds`，与 DSH 左侧栏的分组同一来源），不是会话的 `cwd`；未归入任何工作区的会话自成一组。**没有数量上限**。
+  - **跳转**走 `uiWorkspace.openSession`。导航归视图所有者——`ISessions` 接口本身没有 `open`（其 JSDoc 写着 "navigation belongs to view owners"），早期版本调 `sessions.open` 因而从未生效。
+  - **当前会话那一条**带 `data-current` 标记并弱化显示，但**不禁用**：跳到自己无害，禁用反而会被读成「坏了」。
+  - **会话被删除后**：条目降透明、**但仍然可点**——取消置顶的热区必须够得着；真正取消掉之后条目才消失。
+  - **归档的会话**：归档只是从左侧栏分组里收起，会话本身仍然有效，所以它的置顶照常显示、照常可点。
+  - **工作区名**：自动命名的 `default-workspace` 按当前语言显示为「默认工作区」，与侧栏一致（同一套判据见 DSH 的 `workspaceDisplayTitle`）；用户手动改过的名字原样显示。
 
 ## 教程：迁移 / 新增一个按钮（开一个会话，让 LLM 来做）
 
@@ -116,12 +128,12 @@ LLM 注册完就无需在场；那份 JSON 可导出、可备份、可随环境�
 
 ```sh
 pnpm install
-pnpm typecheck && pnpm test && pnpm build   # L1 门槛（20+ 用例）
+pnpm typecheck && pnpm test && pnpm build   # L1 门槛（91 用例）
 ```
 
 ### 构建：两个入口必须分别构建（共享模块会被拆 chunk，DSH 加载器不认）
 
-`tsdown.config.ts` 用的是**数组配置**（两次独立构建），而不是一个 `entry: ['src/index.ts', 'src/client.ts']`。原因：client 半与 host 半共享的模块（如 `src/favorites.ts`）在多入口单次构建下会被提成 `favorites-<hash>.js` 共享 chunk，`lib/client.js` 顶部随之多出一条 `import ... from './favorites-<hash>.js'`；而 DSH 的 client 模块加载器按**单文件**取 `/plugins/<pkg>/client.js`（合并 bundle 的 `??pkg/client.js,...` 协议不会去拉那个相对 chunk），于是**整个 client 半静默失效**——2026-09-14 实测现象是工具栏连同所有功能按钮一起消失、页面无报错，而 host 路由仍正常响应（很容易误判成服务端问题）。
+`tsdown.config.ts` 用的是**数组配置**（两次独立构建），而不是一个 `entry: ['src/index.ts', 'src/client.ts']`。原因：一旦某模块被 host 半与 client 半**同时** import，多入口单次构建就会把它提成 `<name>-<hash>.js` 共享 chunk，`lib/client.js` 顶部随之多出一条 `import ... from './<name>-<hash>.js'`；而 DSH 的 client 模块加载器按**单文件**取 `/plugins/<pkg>/client.js`（合并 bundle 的 `??pkg/client.js,...` 协议不会去拉那个相对 chunk），于是**整个 client 半静默失效**——2026-09-14 实测现象是工具栏连同所有功能按钮一起消失、页面无报错，而 host 路由仍正常响应（很容易误判成服务端问题）。当时触发它的是 `src/favorites.ts`；那个文件后来并入了 `pinned.ts` 与 `legacy-favorites.ts`，**当前两半没有交集**，但配置保持分开——这个坑一旦出现是静默的，不值得赌。
 
 同步 vendor 时同理：产物不保证就是固定两个文件，要**整目录镜像**并清掉不再产出的旧 hash 文件，别只复制 `client.js`/`index.js`。
 
