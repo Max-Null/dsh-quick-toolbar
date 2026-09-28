@@ -584,8 +584,11 @@ import { REGISTER_BRIEF } from './register-brief.ts'
       '#ssid-toolbar .ssid-tb-pins{display:flex;flex-direction:column;gap:4px}',
       '#ssid-toolbar .ssid-tb-pins>*{opacity:0;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease}',
       '#ssid-toolbar.ssid-tb-expanded .ssid-tb-pins>*{opacity:1;transform:none}',
-      // ☆ 与「置顶会话」入口用业务色，与灰调的宿主功能按钮区分开
-      '#ssid-toolbar .ssid-tb-pin svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
+      // 「钉住」开关与「置顶会话」入口用业务色，与灰调的宿主功能按钮区分开。
+      // 两者必须各用各的类名：`.ssid-tb-pin` 带 `position:absolute;width:26px`，
+      // 是头部右上角那个图标位的定位规则；菜单入口借用它会脱离文档流，把
+      // `.ssid-tb-pins` 的高度压成 0、按钮挤成 26px 宽（2026-09-29 实测）。
+      '#ssid-toolbar .ssid-tb-pin svg,#ssid-toolbar .ssid-tb-pinmenu svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
       '#ssid-toolbar .ssid-tb-pintoggle[data-on="1"] svg{color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
       '#ssid-toolbar .ssid-tb-pingroups{display:flex;flex-direction:column;gap:6px}',
       '#ssid-toolbar .ssid-tb-pingroup{display:flex;flex-direction:column;gap:2px}',
@@ -869,7 +872,7 @@ import { REGISTER_BRIEF } from './register-brief.ts'
         // 菜单入口：按钮上带置顶数量
         var menuBtn = document.createElement('button')
         menuBtn.type = 'button'
-        menuBtn.className = 'ssid-tb-btn ssid-tb-pin'
+        menuBtn.className = 'ssid-tb-btn ssid-tb-pinmenu'
         menuBtn.setAttribute('aria-expanded', pinMenuOpen ? 'true' : 'false')
         menuBtn.innerHTML = toolbarIcon('chat') + '<span></span>'
         var menuLabel = favText('pin.menu') + (pinnedIds.length > 0 ? '（' + pinnedIds.length + '）' : '')
